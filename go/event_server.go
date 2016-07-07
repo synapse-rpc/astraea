@@ -27,7 +27,7 @@ func eventExchage(ch *amqp.Channel) {
  */
 func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery)) {
 	q, err := ch.QueueDeclare(
-		"event_icarus", // name
+		"event_" + appName, // name
 		true, // durable
 		false, // delete when usused
 		false, // exclusive
@@ -55,7 +55,7 @@ func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]i
 	eventExchage(ch)
 	eventQueue(ch, eventCallbackMap)
 	msgs, err := ch.Consume(
-		"event_icarus", // queue
+		"event_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive

@@ -28,7 +28,7 @@ func rpcExchange(ch *amqp.Channel) {
  */
 func rpcQueue(ch *amqp.Channel) {
 	q, err := ch.QueueDeclare(
-		"rpc_srv_icarus", // name
+		"rpc_srv_" + appName, // name
 		true, // durable
 		false, // delete when usused
 		false, // exclusive
@@ -39,7 +39,7 @@ func rpcQueue(ch *amqp.Channel) {
 
 	err = ch.QueueBind(
 		q.Name,
-		"icarus",
+		appName,
 		"rpc",
 		false,
 		nil)
@@ -61,7 +61,7 @@ func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]inter
 	rpcExchange(ch)
 	rpcQueue(ch)
 	msgs, err := ch.Consume(
-		"rpc_srv_icarus", // queue
+		"rpc_srv_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -93,7 +93,7 @@ func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]inter
 				}
 			}
 			response := simplejson.New();
-			response.Set("from", "icarus")
+			response.Set("from", appName)
 			response.Set("to", d.ReplyTo)
 			response.Set("action", "reply-" + action)
 			response.Set("params", result)

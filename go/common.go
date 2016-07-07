@@ -9,12 +9,14 @@ var (
 	eventSender chan map[string]interface{}
 	rpcSender chan map[string]interface{}
 	rpcReceiver chan map[string]interface{}
+	appName string
 )
 /**
 启动 Synapse 组件, 开始监听RPC请求和事件
  */
-func Serve(host, port, user, pass string, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery),
+func Serve(name, host, port, user, pass string, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery),
 rpcCallbackMap map[string]func(map[string]interface{}, amqp.Delivery) interface{}) {
+	appName = name
 	server := "amqp://" + user + ":" + pass + "@" + host + ":" + port
 	conn := createConnection(server)
 	defer conn.Close()

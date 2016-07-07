@@ -29,7 +29,7 @@ func rpcCallbackExchange(ch *amqp.Channel) {
  */
 func rpcCallbackQueue(ch *amqp.Channel) {
 	q, err := ch.QueueDeclare(
-		"rpc_cli_icarus", // name
+		"rpc_cli_" + appName, // name
 		true, // durable
 		false, // delete when usused
 		false, // exclusive
@@ -40,7 +40,7 @@ func rpcCallbackQueue(ch *amqp.Channel) {
 
 	err = ch.QueueBind(
 		q.Name,
-		"icarus",
+		appName,
 		"rpc_cli",
 		false,
 		nil)
@@ -58,7 +58,7 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 	rpcCallbackExchange(ch)
 	rpcCallbackQueue(ch)
 	msgs, err := ch.Consume(
-		"rpc_cli_icarus", // queue
+		"rpc_cli_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -71,7 +71,7 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 	for {
 		data := <-rpcSender
 		query := simplejson.New();
-		query.Set("from", "icarus")
+		query.Set("from", appName)
 		query.Set("to", data["action"].(string))
 		query.Set("action", data["params"].(map[string]interface{})["action"].(string))
 		query.Set("params", data["params"])
@@ -86,7 +86,7 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 			amqp.Publishing{
 				ContentType:   "application/json",
 				CorrelationId: corrId,
-				ReplyTo:       "icarus",
+				ReplyTo:       appName,
 				Body:          []byte(queryJson),
 			})
 		failOnError(err, "Failed to publish Rpc Request")
