@@ -11,6 +11,8 @@ var (
 	rpcReceiver chan map[string]interface{}
 	appName string
 	debug bool
+	disableRpcClient bool
+	disableEventClient bool
 )
 
 type Server struct {
@@ -31,6 +33,8 @@ type Server struct {
  */
 func (s Server) Serve() {
 	debug = s.Debug
+	disableRpcClient = s.DisableRpcClient
+	disableEventClient = s.DisableEventClient
 	if s.AppName == "" {
 		log.Print("[Synapse Error] Must Set AppName , system exit .")
 		return
@@ -79,17 +83,26 @@ func (s Server) Serve() {
 发送一个事件
  */
 func SendEvent(action string, params map[string]interface{}) {
-	query := map[string]interface{}{
-		"action": action,
-		"params": params,
+	if disableEventClient {
+		log.Printf("[Synapse Error] %s: %s \n", "Event Send Not Success", "DisableEventClient set true")
+	} else {
+		query := map[string]interface{}{
+			"action": action,
+			"params": params,
+		}
+		eventSender <- query
+
 	}
-	eventSender <- query
 }
 
 /**
 发起 RPC请求
  */
 func SendRpc(action string, params map[string]interface{}) map[string]interface{} {
+	if disableEventClient {
+		log.Printf("[Synapse Error] %s: %s \n", "Rpq Request Not Send", "DisableRpcClient set true")
+		return nil
+	}
 	query := map[string]interface{}{
 		"action": action,
 		"params": params,

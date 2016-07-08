@@ -75,7 +75,6 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 		query.Set("to", data["action"].(string))
 		query.Set("action", data["params"].(map[string]interface{})["action"].(string))
 		query.Set("params", data["params"])
-		//query.Get("params").Del("action")
 		queryJson, _ := query.MarshalJSON()
 		corrId := randomString(20)
 		err = ch.Publish(
