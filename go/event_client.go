@@ -15,7 +15,7 @@ func eventClient(ch *amqp.Channel, eventSender chan map[string]interface{}) {
 		query.Set("to", data["action"].(string))
 		query.Set("action", "event")
 		query.Set("params", data["params"])
-		queryJson, _ := query.MarshalJSON()
+		queryJSON, _ := query.MarshalJSON()
 		err := ch.Publish(
 			"event", // exchange
 			appName + "." + data["action"].(string), // routing key
@@ -23,11 +23,11 @@ func eventClient(ch *amqp.Channel, eventSender chan map[string]interface{}) {
 			false, // immediate
 			amqp.Publishing{
 				ContentType: "application/json",
-				Body:        []byte(queryJson),
+				Body:        []byte(queryJSON),
 			})
 		failOnError(err, "Failed to publish a event")
 		if debug {
-			log.Printf("[Synapse Debug] Publish Event: %s.%s %s", appName, data["action"], queryJson)
+			log.Printf("[Synapse Debug] Publish Event: %s.%s %s", appName, data["action"], queryJSON)
 		}
 	}
 }

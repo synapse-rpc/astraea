@@ -13,7 +13,7 @@ import (
 func rpcCallbackExchange(ch *amqp.Channel) {
 	err := ch.ExchangeDeclare(
 		"rpc_cli", // name
-		"fanout", // type
+		"direct", // type
 		true, // durable
 		false, // auto-deleted
 		false, // internal
