@@ -7,7 +7,7 @@ import (
 )
 
 func eventClient(ch *amqp.Channel, eventSender chan map[string]interface{}) {
-	log.Printf(" [*] Event Sender ready")
+	log.Printf("[Synapse Info] Event Sender ready")
 	for {
 		data := <-eventSender
 		query := simplejson.New();
@@ -26,6 +26,8 @@ func eventClient(ch *amqp.Channel, eventSender chan map[string]interface{}) {
 				Body:        []byte(queryJson),
 			})
 		failOnError(err, "Failed to publish a event")
-		log.Printf(" [x] Publish a event: %s %s", data["action"], queryJson)
+		if debug {
+			log.Printf("[Synapse Debug] Publish Event: %s.%s %s", appName, data["action"], queryJson)
+		}
 	}
 }

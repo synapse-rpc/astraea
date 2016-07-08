@@ -72,6 +72,10 @@ func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]i
 			action := query.Get("action").MustString()
 			params := query.Get("params").MustMap()
 			if action == "event" {
+				if debug {
+					logData, _ := query.MarshalJSON()
+					log.Printf("[Synapse Debug] Receive Event: %s %s", d.RoutingKey, logData)
+				}
 				var callback func(map[string]interface{}, amqp.Delivery)
 				var ok bool
 				callback, ok = eventCallbackMap[d.RoutingKey]
@@ -88,6 +92,6 @@ func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]i
 		}
 	}()
 
-	log.Printf(" [*] Event Handler Listening")
+	log.Printf("[Synapse Info] Event Handler Listening")
 	<-forever
 }

@@ -10,14 +10,41 @@ var (
 	rpcSender chan map[string]interface{}
 	rpcReceiver chan map[string]interface{}
 	appName string
+	debug bool
 )
+
+type Server struct {
+	Debug              bool
+	DisableRpcClient   bool
+	DisableEventClient bool
+	AppName            string
+	MqHost             string
+	MqPort             string
+	MqUser             string
+	MqPass             string
+	EventCallbackMap   map[string]func(map[string]interface{}, amqp.Delivery)
+	RpcCallbackMap     map[string]func(map[string]interface{}, amqp.Delivery) interface{}
+}
+
 /**
 启动 Synapse 组件, 开始监听RPC请求和事件
  */
-func Serve(name, host, port, user, pass string, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery),
-rpcCallbackMap map[string]func(map[string]interface{}, amqp.Delivery) interface{}) {
-	appName = name
-	server := "amqp://" + user + ":" + pass + "@" + host + ":" + port
+func (s Server) Serve() {
+	debug = s.Debug
+	if s.AppName == "" {
+		log.Print("[Synapse Error] Must Set AppName , system exit .")
+		return
+	} else {
+		appName = s.AppName
+		log.Print("[Synapse Info] System App Name: " + appName)
+	}
+	forever := make(chan bool)
+	if s.Debug {
+		log.Print("[Synapse Warn] System Run Mode: Debug")
+	} else {
+		log.Print("[Synapse Info] System Run Mode: Production")
+	}
+	server := "amqp://" + s.MqUser + ":" + s.MqPass + "@" + s.MqHost + ":" + s.MqPort
 	conn := createConnection(server)
 	defer conn.Close()
 	ch := createChannel(conn)
@@ -25,10 +52,27 @@ rpcCallbackMap map[string]func(map[string]interface{}, amqp.Delivery) interface{
 	eventSender = make(chan map[string]interface{})
 	rpcSender = make(chan map[string]interface{})
 	rpcReceiver = make(chan map[string]interface{})
-	go eventServer(ch, eventCallbackMap)
-	go eventClient(ch, eventSender)
-	go rpcServer(ch, rpcCallbackMap)
-	rpcClient(ch, rpcSender, rpcReceiver)
+	if s.EventCallbackMap != nil {
+		go eventServer(ch, s.EventCallbackMap)
+	} else {
+		log.Printf("[Synapse Warn] Event Handler Disabled: EventCallbackMap not set")
+	}
+	if s.RpcCallbackMap != nil {
+		go rpcServer(ch, s.RpcCallbackMap)
+	} else {
+		log.Printf("[Synapse Warn] Rpc Handler Disabled: RpcCallbackMap not set")
+	}
+	if !s.DisableEventClient {
+		go eventClient(ch, eventSender)
+	} else {
+		log.Printf("[Synapse Warn] Event Sender Disabled: DisableEventClient set true")
+	}
+	if !s.DisableRpcClient {
+		go rpcClient(ch, rpcSender, rpcReceiver)
+	} else {
+		log.Printf("[Synapse Warn] Rpc Sender Disabled: DisableRpcClient set true")
+	}
+	<-forever
 }
 
 /**
@@ -77,6 +121,6 @@ func createChannel(conn *amqp.Connection) *amqp.Channel {
  */
 func failOnError(err error, msg string) {
 	if err != nil {
-		log.Fatalf("%s: %s \n", msg, err)
+		log.Fatalf("[Synapse Error] %s: %s \n", msg, err)
 	}
 }

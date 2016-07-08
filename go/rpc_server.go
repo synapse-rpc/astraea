@@ -78,6 +78,10 @@ func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]inter
 			query, _ := simplejson.NewJson(d.Body)
 			action := query.Get("action").MustString()
 			params := query.Get("params").MustMap()
+			if debug {
+				logData, _ := query.MarshalJSON()
+				log.Printf("[Synapse Debug] Receive Rpc Request: %s", logData)
+			}
 			var callback func(map[string]interface{}, amqp.Delivery) interface{}
 			var ok bool
 			var result interface{}
@@ -109,10 +113,13 @@ func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]inter
 					Body:          []byte(resultJson),
 				})
 			failOnError(err, "Failed to reply Rpc Request")
+			if debug {
+				log.Printf("[Synapse Debug] Reply Rpc Request: %s", resultJson)
+			}
 			d.Ack(false)
 		}
 	}()
 
-	log.Printf(" [*] Rpc Handler Listening")
+	log.Printf("[Synapse Info] Rpc Handler Listening")
 	<-forever
 }

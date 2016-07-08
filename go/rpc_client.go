@@ -67,7 +67,7 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 		nil, // args
 	)
 	failOnError(err, "Failed to register Rpc Callback consumer")
-	log.Printf(" [*] Rpc Sender ready")
+	log.Printf("[Synapse Info] Rpc Sender ready")
 	for {
 		data := <-rpcSender
 		query := simplejson.New();
@@ -90,12 +90,19 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 				Body:          []byte(queryJson),
 			})
 		failOnError(err, "Failed to publish Rpc Request")
+		if debug {
+			log.Printf("[Synapse Debug] Publish Rpc Request: %s", queryJson)
+		}
 		for d := range msgs {
 			if corrId == d.CorrelationId {
 				query, _ := simplejson.NewJson(d.Body)
 				action := query.Get("action").MustString()
 				params := query.Get("params").MustMap()
 				if action == "reply-" + data["params"].(map[string]interface{})["action"].(string) {
+					if debug {
+						logData, _ := query.MarshalJSON()
+						log.Printf("[Synapse Debug] Receive Rpc Callback: %s", logData)
+					}
 					d.Ack(false)
 					rpcReceiver <- params
 				}
