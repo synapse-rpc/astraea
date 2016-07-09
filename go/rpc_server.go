@@ -30,7 +30,7 @@ func rpcQueue(ch *amqp.Channel) {
 	q, err := ch.QueueDeclare(
 		"rpc_srv_" + appName, // name
 		true, // durable
-		false, // delete when usused
+		true, // delete when usused
 		false, // exclusive
 		false, // no-wait
 		nil, // arguments
