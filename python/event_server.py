@@ -4,13 +4,6 @@ import json
 
 class EventServer(Base):
     @classmethod
-    def event_exchange(self):
-        self.mqch.exchange_declare(exchange='event',
-                                   type='topic',
-                                   durable=True
-                                   )
-
-    @classmethod
     def event_queue(self):
         self.mqch.queue_declare(queue="event_" + self.app_name, durable=True)
         for k in self.event_callback_map.keys():

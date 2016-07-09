@@ -2,9 +2,10 @@ import pika
 import threading
 
 from .event_server import EventServer
+from .rpc_server import RpcServer
 
 
-class Synapse(EventServer):
+class Synapse(EventServer,RpcServer):
     @classmethod
     def serve(self):
         if self.app_name == "":
@@ -24,7 +25,7 @@ class Synapse(EventServer):
         if self.rpc_callback_map == {}:
             self.log("[Synapse Warn] Rpc Handler Disabled: rpc_callback_map not set")
         else:
-            threading._start_new_thread(self.event_serve, ())
+            threading._start_new_thread(self.rpc_serve, ())
         if self.disable_event_client:
             self.log("[Synapse Warn] Event Sender Disabled: disable_event_client set True")
         if self.disable_rpc_client:
