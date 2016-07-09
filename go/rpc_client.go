@@ -71,14 +71,14 @@ RPC Clenit
 func (s *Server) rpcClent(data map[string]interface{}, result chan map[string]interface{}) {
 	query := simplejson.New();
 	query.Set("from", s.AppName)
-	query.Set("to", data["action"].(string))
-	query.Set("action", data["params"].(map[string]interface{})["action"].(string))
+	query.Set("to", data["appName"].(string))
+	query.Set("action", data["action"])
 	query.Set("params", data["params"])
 	queryJson, _ := query.MarshalJSON()
 	corrId := s.randomString(20)
 	err = s.mqch.Publish(
 		s.SysName, // exchange
-		"rpc.srv." + data["action"].(string), // routing key
+		"rpc.srv." + data["appName"].(string), // routing key
 		false, // mandatory
 		false, // immediate
 		amqp.Publishing{
@@ -96,7 +96,7 @@ func (s *Server) rpcClent(data map[string]interface{}, result chan map[string]in
 			query, _ := simplejson.NewJson(d.Body)
 			action := query.Get("action").MustString()
 			params := query.Get("params").MustMap()
-			if action == "reply-" + data["params"].(map[string]interface{})["action"].(string) {
+			if action == "reply-" + data["action"].(string) {
 				if s.Debug {
 					logData, _ := query.MarshalJSON()
 					log.Printf("[Synapse Debug] Receive Rpc Callback: %s", logData)
@@ -112,12 +112,13 @@ func (s *Server) rpcClent(data map[string]interface{}, result chan map[string]in
 /**
 发起 RPC请求
  */
-func (s *Server) SendRpc(action string, params map[string]interface{}) map[string]interface{} {
+func (s *Server) SendRpc(appName, action string, params map[string]interface{}) map[string]interface{} {
 	if s.DisableEventClient {
 		log.Printf("[Synapse Error] %s: %s \n", "Rpc Request Not Send", "DisableRpcClient set true")
 		return map[string]interface{}{"Error":"Rpc Request Not Send: DisableRpcClient set true"}
 	}
 	data := map[string]interface{}{
+		"appName": appName,
 		"action": action,
 		"params": params,
 	}

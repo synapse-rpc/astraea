@@ -77,7 +77,7 @@ func (s *Server) rpcServer() {
 		}
 		response := simplejson.New();
 		response.Set("from", s.AppName)
-		response.Set("to", d.ReplyTo)
+		response.Set("to", query.Get("from").MustString())
 		response.Set("action", "reply-" + action)
 		response.Set("params", result)
 		resultJson, _ := response.MarshalJSON()
@@ -85,7 +85,7 @@ func (s *Server) rpcServer() {
 			s.SysName, // exchange
 			d.ReplyTo, // routing key
 			false, // mandatory
-			false, // immediate
+			false, // immediatec
 			amqp.Publishing{
 				ContentType:   "application/json",
 				CorrelationId: d.CorrelationId,
