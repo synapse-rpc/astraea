@@ -6,16 +6,15 @@ import pika
 class RpcServer(Base):
     @classmethod
     def rpc_queue(self):
-        self.mqch.queue_declare(queue="rpc_srv_" + self.app_name, durable=True,auto_delete=True)
+        self.mqch.queue_declare(queue=self.sys_name+"_rpc_srv_" + self.app_name, durable=True,auto_delete=True)
         for k in self.event_callback_map.keys():
-            self.mqch.queue_bind(exchange='rpc', queue="rpc_srv_" + self.app_name,routing_key=self.app_name)
+            self.mqch.queue_bind(exchange=self.sys_name, queue=self.sys_name+"_rpc_srv_" + self.app_name,routing_key="rpc.srv."+self.app_name)
 
     @classmethod
     def rpc_serve(self):
         if "*" not in self.rpc_callback_map.keys():
             self.log("[Synapse Error] Rpc Handler Must have * to handle unknow Request")
             exit
-        self.rpc_exchange()
         self.rpc_queue()
 
         def callback(ch, method, properties, body):
@@ -33,7 +32,7 @@ class RpcServer(Base):
                 "action": "reply-%s" % (data["action"]),
                 "params": ret
             })
-            ch.basic_publish(exchange='rpc_cli',
+            ch.basic_publish(exchange=self.sys_name,
                      routing_key=properties.reply_to,
                      properties=pika.BasicProperties(correlation_id = \
                                                          properties.correlation_id),
@@ -43,6 +42,6 @@ class RpcServer(Base):
             ch.basic_ack(delivery_tag = method.delivery_tag)
         self.mqch.basic_qos(prefetch_count=1)
         self.mqch.basic_consume(callback,
-                                queue="rpc_srv_" + self.app_name,)
+                                queue=self.sys_name+"_rpc_srv_" + self.app_name)
         self.log('[Synapse Info] Rpc Handler Listening')
         self.mqch.start_consuming()

@@ -3,17 +3,7 @@ package synapse
 import (
 	"github.com/streadway/amqp"
 	"log"
-)
-
-var (
-	eventSender chan map[string]interface{}
-	rpcSender chan map[string]interface{}
-	rpcReceiver chan map[string]interface{}
-	appName string
-	sysName string
-	debug bool
-	disableRpcClient bool
-	disableEventClient bool
+	"time"
 )
 
 type Server struct {
@@ -28,21 +18,31 @@ type Server struct {
 	MqPass             string
 	EventCallbackMap   map[string]func(map[string]interface{}, amqp.Delivery)
 	RpcCallbackMap     map[string]func(map[string]interface{}, amqp.Delivery) interface{}
+	RpcTimeout         time.Duration
+
+	conn               *amqp.Connection
+	mqch               *amqp.Channel
+	cli                <-chan amqp.Delivery
+}
+
+var err error
+
+/**
+创建一个新的Synapse
+ */
+func New() *Server {
+	return &Server{}
 }
 
 /**
 启动 Synapse 组件, 开始监听RPC请求和事件
  */
-func (s Server) Serve() {
-	debug = s.Debug
-	disableRpcClient = s.DisableRpcClient
-	disableEventClient = s.DisableEventClient
+func (s *Server) Serve() {
 	if s.AppName == "" || s.SysName == "" {
 		log.Fatalf("[Synapse Error] Must Set SysName and AppName system exit .")
 	} else {
-		sysName = s.SysName
-		appName = s.AppName
-		log.Print("[Synapse Info] System App Name: " + appName)
+		log.Print("[Synapse Info] System App Name: " + s.SysName)
+		log.Print("[Synapse Info] System App Name: " + s.AppName)
 	}
 	forever := make(chan bool)
 	if s.Debug {
@@ -50,32 +50,30 @@ func (s Server) Serve() {
 	} else {
 		log.Print("[Synapse Info] System Run Mode: Production")
 	}
-	server := "amqp://" + s.MqUser + ":" + s.MqPass + "@" + s.MqHost + ":" + s.MqPort
-	conn := createConnection(server)
-	defer conn.Close()
-	ch := createChannel(conn)
-	defer ch.Close()
-	checkAndCreateExchange(ch)
-	eventSender = make(chan map[string]interface{})
-	rpcSender = make(chan map[string]interface{})
-	rpcReceiver = make(chan map[string]interface{})
+	s.createConnection()
+	defer s.conn.Close()
+	s.createChannel()
+	defer s.mqch.Close()
+	s.checkAndCreateExchange()
 	if s.EventCallbackMap != nil {
-		go eventServer(ch, s.EventCallbackMap)
+		go s.eventServer()
 	} else {
 		log.Printf("[Synapse Warn] Event Handler Disabled: EventCallbackMap not set")
 	}
 	if s.RpcCallbackMap != nil {
-		go rpcServer(ch, s.RpcCallbackMap)
+		go s.rpcServer()
 	} else {
 		log.Printf("[Synapse Warn] Rpc Handler Disabled: RpcCallbackMap not set")
 	}
-	if !s.DisableEventClient {
-		go eventClient(ch, eventSender)
-	} else {
+	if s.DisableEventClient {
 		log.Printf("[Synapse Warn] Event Sender Disabled: DisableEventClient set true")
 	}
 	if !s.DisableRpcClient {
-		go rpcClient(ch, rpcSender, rpcReceiver)
+		s.rpcCallbackQueue()
+		go s.rpcCallbackQueueListen()
+		if s.RpcTimeout == 0 {
+			s.RpcTimeout = 2
+		}
 	} else {
 		log.Printf("[Synapse Warn] Rpc Sender Disabled: DisableRpcClient set true")
 	}
@@ -83,61 +81,29 @@ func (s Server) Serve() {
 }
 
 /**
-发送一个事件
- */
-func SendEvent(action string, params map[string]interface{}) {
-	if disableEventClient {
-		log.Printf("[Synapse Error] %s: %s \n", "Event Send Not Success", "DisableEventClient set true")
-	} else {
-		query := map[string]interface{}{
-			"action": action,
-			"params": params,
-		}
-		eventSender <- query
-
-	}
-}
-
-/**
-发起 RPC请求
- */
-func SendRpc(action string, params map[string]interface{}) map[string]interface{} {
-	if disableEventClient {
-		log.Printf("[Synapse Error] %s: %s \n", "Rpq Request Not Send", "DisableRpcClient set true")
-		return nil
-	}
-	query := map[string]interface{}{
-		"action": action,
-		"params": params,
-	}
-	rpcSender <- query
-	return <-rpcReceiver
-}
-
-/**
 创建到 Rabbit MQ的链接
  */
-func createConnection(server string) *amqp.Connection {
-	conn, err := amqp.Dial(server)
-	failOnError(err, "Failed to connect to RabbitMQ")
-	return conn
+func (s *Server) createConnection() {
+	s.conn, err = amqp.Dial("amqp://" + s.MqUser + ":" + s.MqPass + "@" + s.MqHost + ":" + s.MqPort)
+	s.failOnError(err, "Failed to connect to RabbitMQ")
+	log.Print("[Synapse Info] Rabbit MQ Connection Created.")
 }
 
 /**
 创建到 Rabbit MQ 的通道
  */
-func createChannel(conn *amqp.Connection) *amqp.Channel {
-	ch, err := conn.Channel()
-	failOnError(err, "Failed to open a channel")
-	return ch
+func (s *Server) createChannel() {
+	s.mqch, err = s.conn.Channel()
+	s.failOnError(err, "Failed to open a channel")
+	log.Print("[Synapse Info] Rabbit MQ Channel Created.")
 }
 
 /**
 注册通讯用的 MQ Exchange
  */
-func checkAndCreateExchange(ch *amqp.Channel) {
-	err := ch.ExchangeDeclare(
-		sysName, // name
+func (s *Server) checkAndCreateExchange() {
+	err := s.mqch.ExchangeDeclare(
+		s.SysName, // name
 		"topic", // type
 		true, // durable
 		false, // auto-deleted
@@ -145,14 +111,14 @@ func checkAndCreateExchange(ch *amqp.Channel) {
 		false, // no-wait
 		nil, // arguments
 	)
-	failOnError(err, "Failed to declare Event Exchange")
+	s.failOnError(err, "Failed to declare Event Exchange")
 	return
 }
 
 /**
 便捷报错方法
  */
-func failOnError(err error, msg string) {
+func (s *Server) failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("[Synapse Error] %s: %s \n", msg, err)
 	}

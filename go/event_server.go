@@ -9,25 +9,25 @@ import (
 /**
 绑定事件监听队列
  */
-func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery)) {
-	q, err := ch.QueueDeclare(
-		sysName + "_event_" + appName, // name
+func (s *Server) eventQueue() {
+	q, err := s.mqch.QueueDeclare(
+		s.SysName + "_event_" + s.AppName, // name
 		true, // durable
 		false, // delete when usused
 		false, // exclusive
 		false, // no-wait
 		nil, // arguments
 	)
-	failOnError(err, "Failed to declare event queue")
+	s.failOnError(err, "Failed to declare event queue")
 
-	for k, _ := range eventCallbackMap {
-		err = ch.QueueBind(
+	for k, _ := range s.EventCallbackMap {
+		err = s.mqch.QueueBind(
 			q.Name, // queue name
 			"event." + k, // routing key
-			sysName, // exchange
+			s.SysName, // exchange
 			false,
 			nil)
-		failOnError(err, "Failed to bind event queue: " + k)
+		s.failOnError(err, "Failed to bind event queue: " + k)
 	}
 }
 
@@ -35,10 +35,10 @@ func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]in
 创建事件监听
 callback回调为监听到事件后的处理函数
  */
-func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery)) {
-	eventQueue(ch, eventCallbackMap)
-	msgs, err := ch.Consume(
-		sysName + "_event_" + appName, // queue
+func (s *Server) eventServer() {
+	s.eventQueue()
+	msgs, err := s.mqch.Consume(
+		s.SysName + "_event_" + s.AppName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -46,35 +46,29 @@ func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]i
 		false, // no-wait
 		nil, // args
 	)
-	failOnError(err, "Failed to register event consumer")
-
-	forever := make(chan bool)
-	go func() {
-		for d := range msgs {
-			query, _ := simplejson.NewJson(d.Body)
-			action := query.Get("action").MustString()
-			params := query.Get("params").MustMap()
-			if action == "event" {
-				if debug {
-					logData, _ := query.MarshalJSON()
-					log.Printf("[Synapse Debug] Receive Event: %s %s", d.RoutingKey, logData)
-				}
-				var callback func(map[string]interface{}, amqp.Delivery)
-				var ok bool
-				callback, ok = eventCallbackMap[d.RoutingKey]
+	s.failOnError(err, "Failed to register event consumer")
+	log.Printf("[Synapse Info] Event Server Handler Listening")
+	for d := range msgs {
+		query, _ := simplejson.NewJson(d.Body)
+		action := query.Get("action").MustString()
+		params := query.Get("params").MustMap()
+		if action == "event" {
+			if s.Debug {
+				logData, _ := query.MarshalJSON()
+				log.Printf("[Synapse Debug] Receive Event: %s %s", d.RoutingKey, logData)
+			}
+			var callback func(map[string]interface{}, amqp.Delivery)
+			var ok bool
+			callback, ok = s.EventCallbackMap[d.RoutingKey]
+			if ok {
+				callback(params, d)
+			} else {
+				callback, ok = s.EventCallbackMap["*"]
 				if ok {
 					callback(params, d)
-				} else {
-					callback, ok = eventCallbackMap["*"]
-					if ok {
-						callback(params, d)
-					}
 				}
-				d.Ack(false)
 			}
+			d.Ack(false)
 		}
-	}()
-
-	log.Printf("[Synapse Info] Event Handler Listening")
-	<-forever
+	}
 }
