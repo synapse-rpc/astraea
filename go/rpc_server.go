@@ -7,30 +7,13 @@ import (
 )
 
 /**
-注册 RPC 的 MQ Exchange
- */
-func rpcExchange(ch *amqp.Channel) {
-	err := ch.ExchangeDeclare(
-		"rpc", // name
-		"fanout", // type
-		true, // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil, // arguments
-	)
-	failOnError(err, "Failed to declare Event Exchange")
-	return
-}
-
-/**
 绑定RPC监听队列
  */
 func rpcQueue(ch *amqp.Channel) {
 	q, err := ch.QueueDeclare(
-		"rpc_srv_" + appName, // name
+		sysName + "_rpc_srv_" + appName, // name
 		true, // durable
-		false, // delete when usused
+		true, // delete when usused
 		false, // exclusive
 		false, // no-wait
 		nil, // arguments
@@ -39,8 +22,8 @@ func rpcQueue(ch *amqp.Channel) {
 
 	err = ch.QueueBind(
 		q.Name,
-		appName,
-		"rpc",
+		"rpc.srv." + appName,
+		sysName,
 		false,
 		nil)
 	failOnError(err, "Failed to Bind Rpc Exchange and Queue")
@@ -58,10 +41,9 @@ func rpcQueue(ch *amqp.Channel) {
 callback回调为监听到RPC请求后的处理函数
  */
 func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]interface{}, amqp.Delivery) interface{}) {
-	rpcExchange(ch)
 	rpcQueue(ch)
 	msgs, err := ch.Consume(
-		"rpc_srv_" + appName, // queue
+		sysName + "_rpc_srv_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -103,7 +85,7 @@ func rpcServer(ch *amqp.Channel, rpcCallbackMap map[string]func(map[string]inter
 			response.Set("params", result)
 			resultJson, _ := response.MarshalJSON()
 			err = ch.Publish(
-				"rpc_cli", // exchange
+				sysName, // exchange
 				d.ReplyTo, // routing key
 				false, // mandatory
 				false, // immediate

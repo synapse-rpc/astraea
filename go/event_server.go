@@ -7,27 +7,11 @@ import (
 )
 
 /**
-注册 事件 的 MQ Exchange
- */
-func eventExchage(ch *amqp.Channel) {
-	err := ch.ExchangeDeclare(
-		"event", // name
-		"topic", // type
-		true, // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil, // arguments
-	)
-	failOnError(err, "Failed to declare Rpc exchange")
-}
-
-/**
 绑定事件监听队列
  */
 func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery)) {
 	q, err := ch.QueueDeclare(
-		"event_" + appName, // name
+		sysName + "_event_" + appName, // name
 		true, // durable
 		false, // delete when usused
 		false, // exclusive
@@ -39,8 +23,8 @@ func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]in
 	for k, _ := range eventCallbackMap {
 		err = ch.QueueBind(
 			q.Name, // queue name
-			k, // routing key
-			"event", // exchange
+			"event." + k, // routing key
+			sysName, // exchange
 			false,
 			nil)
 		failOnError(err, "Failed to bind event queue: " + k)
@@ -52,10 +36,9 @@ func eventQueue(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]in
 callback回调为监听到事件后的处理函数
  */
 func eventServer(ch *amqp.Channel, eventCallbackMap map[string]func(map[string]interface{}, amqp.Delivery)) {
-	eventExchage(ch)
 	eventQueue(ch, eventCallbackMap)
 	msgs, err := ch.Consume(
-		"event_" + appName, // queue
+		sysName + "_event_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
