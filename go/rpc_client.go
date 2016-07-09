@@ -1,45 +1,59 @@
 package synapse
 
 import (
-	"github.com/streadway/amqp"
 	"log"
-	"github.com/bitly/go-simplejson"
 	"math/rand"
+	"github.com/bitly/go-simplejson"
+	"github.com/streadway/amqp"
+	"time"
 )
 /**
 绑定RPC Callback监听队列
  */
-func rpcCallbackQueue(ch *amqp.Channel) {
-	q, err := ch.QueueDeclare(
-		sysName + "_rpc_cli_" + appName, // name
+func (s *Server) rpcCallbackQueue() {
+	q, err := s.mqch.QueueDeclare(
+		s.SysName + "_rpc_cli_" + s.AppName, // name
 		true, // durable
 		true, // delete when usused
 		false, // exclusive
 		false, // no-wait
 		nil, // arguments
 	)
-	failOnError(err, "Failed to declare rpcQueue")
+	s.failOnError(err, "Failed to declare rpcQueue")
 
-	err = ch.QueueBind(
+	err = s.mqch.QueueBind(
 		q.Name,
-		"rpc.cli." + appName,
-		sysName,
+		"rpc.cli." + s.AppName,
+		s.SysName,
 		false,
 		nil)
-	failOnError(err, "Failed to Bind Rpc Exchange and Queue")
+	s.failOnError(err, "Failed to Bind Rpc Exchange and Queue")
 
-	err = ch.Qos(
+	err = s.mqch.Qos(
 		1, // prefetch count
 		0, // prefetch size
 		false, // global
 	)
-	failOnError(err, "Failed to set Rpc Queue QoS")
+	s.failOnError(err, "Failed to set Rpc Queue QoS")
 }
 
-func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcReceiver chan map[string]interface{}) {
-	rpcCallbackQueue(ch)
-	msgs, err := ch.Consume(
-		sysName + "_rpc_cli_" + appName, // queue
+func (s *Server) randomString(l int) string {
+	bytes := make([]byte, l)
+	for i := 0; i < l; i++ {
+		bytes[i] = byte(s.randInt(65, 90))
+	}
+	return string(bytes)
+}
+func (s *Server) randInt(min int, max int) int {
+	return min + rand.Intn(max - min)
+}
+
+/**
+创建 Callback 队列监听
+ */
+func (s *Server) rpcCallbackQueueListen() {
+	s.cli, err = s.mqch.Consume(
+		s.SysName + "_rpc_cli_" + s.AppName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -47,58 +61,74 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 		false, // no-wait
 		nil, // args
 	)
-	failOnError(err, "Failed to register Rpc Callback consumer")
-	log.Printf("[Synapse Info] Rpc Sender ready")
-	for {
-		data := <-rpcSender
-		query := simplejson.New();
-		query.Set("from", appName)
-		query.Set("to", data["action"].(string))
-		query.Set("action", data["params"].(map[string]interface{})["action"].(string))
-		query.Set("params", data["params"])
-		queryJson, _ := query.MarshalJSON()
-		corrId := randomString(20)
-		err = ch.Publish(
-			sysName, // exchange
-			"rpc.srv." + data["action"].(string), // routing key
-			false, // mandatory
-			false, // immediate
-			amqp.Publishing{
-				ContentType:   "application/json",
-				CorrelationId: corrId,
-				ReplyTo:       "rpc.cli." + appName,
-				Body:          []byte(queryJson),
-			})
-		failOnError(err, "Failed to publish Rpc Request")
-		if debug {
-			log.Printf("[Synapse Debug] Publish Rpc Request: %s", queryJson)
-		}
-		for d := range msgs {
-			if corrId == d.CorrelationId {
-				query, _ := simplejson.NewJson(d.Body)
-				action := query.Get("action").MustString()
-				params := query.Get("params").MustMap()
-				if action == "reply-" + data["params"].(map[string]interface{})["action"].(string) {
-					if debug {
-						logData, _ := query.MarshalJSON()
-						log.Printf("[Synapse Debug] Receive Rpc Callback: %s", logData)
-					}
-					d.Ack(false)
-					rpcReceiver <- params
+	s.failOnError(err, "Failed to register Rpc Callback consumer")
+	log.Printf("[Synapse Info] Rpc Client Handler Listening")
+}
+
+/**
+RPC Clenit
+ */
+func (s *Server) rpcClent(data map[string]interface{}, result chan map[string]interface{}) {
+	query := simplejson.New();
+	query.Set("from", s.AppName)
+	query.Set("to", data["action"].(string))
+	query.Set("action", data["params"].(map[string]interface{})["action"].(string))
+	query.Set("params", data["params"])
+	queryJson, _ := query.MarshalJSON()
+	corrId := s.randomString(20)
+	err = s.mqch.Publish(
+		s.SysName, // exchange
+		"rpc.srv." + data["action"].(string), // routing key
+		false, // mandatory
+		false, // immediate
+		amqp.Publishing{
+			ContentType:   "application/json",
+			CorrelationId: corrId,
+			ReplyTo:       "rpc.cli." + s.AppName,
+			Body:          []byte(queryJson),
+		})
+	s.failOnError(err, "Failed to publish Rpc Request")
+	if s.Debug {
+		log.Printf("[Synapse Debug] Publish Rpc Request: %s", queryJson)
+	}
+	for d := range s.cli {
+		if corrId == d.CorrelationId {
+			query, _ := simplejson.NewJson(d.Body)
+			action := query.Get("action").MustString()
+			params := query.Get("params").MustMap()
+			if action == "reply-" + data["params"].(map[string]interface{})["action"].(string) {
+				if s.Debug {
+					logData, _ := query.MarshalJSON()
+					log.Printf("[Synapse Debug] Receive Rpc Callback: %s", logData)
 				}
-				break
+				d.Ack(false)
+				result <- params
 			}
+			break
 		}
 	}
 }
 
-func randomString(l int) string {
-	bytes := make([]byte, l)
-	for i := 0; i < l; i++ {
-		bytes[i] = byte(randInt(65, 90))
+/**
+发起 RPC请求
+ */
+func (s *Server) SendRpc(action string, params map[string]interface{}) map[string]interface{} {
+	if s.DisableEventClient {
+		log.Printf("[Synapse Error] %s: %s \n", "Rpc Request Not Send", "DisableRpcClient set true")
+		return map[string]interface{}{"Error":"Rpc Request Not Send: DisableRpcClient set true"}
 	}
-	return string(bytes)
-}
-func randInt(min int, max int) int {
-	return min + rand.Intn(max - min)
+	data := map[string]interface{}{
+		"action": action,
+		"params": params,
+	}
+	result := make(chan map[string]interface{})
+	go s.rpcClent(data, result)
+	select {
+	case ret := <-result:
+		return ret
+	case <-time.After(time.Second * s.RpcTimeout):
+		log.Printf("[Synapse Error] %s: %s \n", "Rpc Request Not Success", "Request Timeout")
+		return map[string]interface{}{"Error":"Rpc Request Not Success: Request Timeout"}
+	}
+
 }
