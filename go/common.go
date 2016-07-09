@@ -10,6 +10,7 @@ var (
 	rpcSender chan map[string]interface{}
 	rpcReceiver chan map[string]interface{}
 	appName string
+	sysName string
 	debug bool
 	disableRpcClient bool
 	disableEventClient bool
@@ -20,6 +21,7 @@ type Server struct {
 	DisableRpcClient   bool
 	DisableEventClient bool
 	AppName            string
+	SysName            string
 	MqHost             string
 	MqPort             string
 	MqUser             string
@@ -35,10 +37,10 @@ func (s Server) Serve() {
 	debug = s.Debug
 	disableRpcClient = s.DisableRpcClient
 	disableEventClient = s.DisableEventClient
-	if s.AppName == "" {
-		log.Print("[Synapse Error] Must Set AppName , system exit .")
-		return
+	if s.AppName == "" || s.SysName == "" {
+		log.Fatalf("[Synapse Error] Must Set SysName and AppName system exit .")
 	} else {
+		sysName = s.SysName
 		appName = s.AppName
 		log.Print("[Synapse Info] System App Name: " + appName)
 	}
@@ -53,6 +55,7 @@ func (s Server) Serve() {
 	defer conn.Close()
 	ch := createChannel(conn)
 	defer ch.Close()
+	checkAndCreateExchange(ch)
 	eventSender = make(chan map[string]interface{})
 	rpcSender = make(chan map[string]interface{})
 	rpcReceiver = make(chan map[string]interface{})
@@ -127,6 +130,23 @@ func createChannel(conn *amqp.Connection) *amqp.Channel {
 	ch, err := conn.Channel()
 	failOnError(err, "Failed to open a channel")
 	return ch
+}
+
+/**
+注册通讯用的 MQ Exchange
+ */
+func checkAndCreateExchange(ch *amqp.Channel) {
+	err := ch.ExchangeDeclare(
+		sysName, // name
+		"topic", // type
+		true, // durable
+		false, // auto-deleted
+		false, // internal
+		false, // no-wait
+		nil, // arguments
+	)
+	failOnError(err, "Failed to declare Event Exchange")
+	return
 }
 
 /**

@@ -17,8 +17,8 @@ func eventClient(ch *amqp.Channel, eventSender chan map[string]interface{}) {
 		query.Set("params", data["params"])
 		queryJSON, _ := query.MarshalJSON()
 		err := ch.Publish(
-			"event", // exchange
-			appName + "." + data["action"].(string), // routing key
+			sysName, // exchange
+			"event." + appName + "." + data["action"].(string), // routing key
 			false, // mandatory
 			false, // immediate
 			amqp.Publishing{

@@ -6,30 +6,12 @@ import (
 	"github.com/bitly/go-simplejson"
 	"math/rand"
 )
-
-/**
-注册 RPC Callback的 MQ Exchange
- */
-func rpcCallbackExchange(ch *amqp.Channel) {
-	err := ch.ExchangeDeclare(
-		"rpc_cli", // name
-		"direct", // type
-		true, // durable
-		false, // auto-deleted
-		false, // internal
-		false, // no-wait
-		nil, // arguments
-	)
-	failOnError(err, "Failed to declare Event Exchange")
-	return
-}
-
 /**
 绑定RPC Callback监听队列
  */
 func rpcCallbackQueue(ch *amqp.Channel) {
 	q, err := ch.QueueDeclare(
-		"rpc_cli_" + appName, // name
+		sysName + "_rpc_cli_" + appName, // name
 		true, // durable
 		true, // delete when usused
 		false, // exclusive
@@ -40,8 +22,8 @@ func rpcCallbackQueue(ch *amqp.Channel) {
 
 	err = ch.QueueBind(
 		q.Name,
-		appName,
-		"rpc_cli",
+		"rpc.cli." + appName,
+		sysName,
 		false,
 		nil)
 	failOnError(err, "Failed to Bind Rpc Exchange and Queue")
@@ -55,10 +37,9 @@ func rpcCallbackQueue(ch *amqp.Channel) {
 }
 
 func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcReceiver chan map[string]interface{}) {
-	rpcCallbackExchange(ch)
 	rpcCallbackQueue(ch)
 	msgs, err := ch.Consume(
-		"rpc_cli_" + appName, // queue
+		sysName + "_rpc_cli_" + appName, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -78,14 +59,14 @@ func rpcClient(ch *amqp.Channel, rpcSender chan map[string]interface{}, rpcRecei
 		queryJson, _ := query.MarshalJSON()
 		corrId := randomString(20)
 		err = ch.Publish(
-			"rpc", // exchange
-			data["action"].(string), // routing key
+			sysName, // exchange
+			"rpc.srv." + data["action"].(string), // routing key
 			false, // mandatory
 			false, // immediate
 			amqp.Publishing{
 				ContentType:   "application/json",
 				CorrelationId: corrId,
-				ReplyTo:       appName,
+				ReplyTo:       "rpc.cli." + appName,
 				Body:          []byte(queryJson),
 			})
 		failOnError(err, "Failed to publish Rpc Request")
