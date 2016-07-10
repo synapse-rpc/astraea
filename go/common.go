@@ -72,7 +72,7 @@ func (s *Server) Serve() {
 		s.rpcCallbackQueue()
 		go s.rpcCallbackQueueListen()
 		if s.RpcTimeout == 0 {
-			s.RpcTimeout = 2
+			s.RpcTimeout = 3
 		}
 	} else {
 		log.Printf("[Synapse Warn] Rpc Sender Disabled: DisableRpcClient set true")

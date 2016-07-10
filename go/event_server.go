@@ -50,16 +50,15 @@ func (s *Server) eventServer() {
 	log.Printf("[Synapse Info] Event Server Handler Listening")
 	for d := range msgs {
 		query, _ := simplejson.NewJson(d.Body)
-		action := query.Get("action").MustString()
 		params := query.Get("params").MustMap()
-		if action == "event" {
+		if query.Get("to").MustString() == "event" {
 			if s.Debug {
 				logData, _ := query.MarshalJSON()
-				log.Printf("[Synapse Debug] Receive Event: %s %s", d.RoutingKey, logData)
+				log.Printf("[Synapse Debug] Receive Event: %s.%s %s", query.Get("from").MustString(), query.Get("action").MustString(), logData)
 			}
 			var callback func(map[string]interface{}, amqp.Delivery)
 			var ok bool
-			callback, ok = s.EventCallbackMap[d.RoutingKey]
+			callback, ok = s.EventCallbackMap[query.Get("from").MustString() + "." + query.Get("action").MustString()]
 			if ok {
 				callback(params, d)
 			} else {
