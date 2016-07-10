@@ -35,13 +35,15 @@ class Base:
         self.event_callback_map = rpc_callback_map if rpc_callback_map else False
 
     @classmethod
-    def create_channel(self):
-        connection = pika.BlockingConnection(pika.ConnectionParameters(
+    def create_connection(self):
+        self.conn = pika.BlockingConnection(pika.ConnectionParameters(
             host=self.mq_host,
             port=self.mq_port,
             credentials=pika.PlainCredentials(username=self.mq_user, password=self.mq_pass)
         ))
-        self.mqch = connection.channel()
+    @classmethod
+    def create_channel(self):
+        self.mqch = self.conn.channel()
 
     @classmethod
     def check_exchange(self):
