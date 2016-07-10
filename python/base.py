@@ -15,6 +15,7 @@ class Base:
     mq_pass = ''
     event_callback_map = {}
     rpc_callback_map = {}
+    rpc_cli_results = {}
 
     mqch = None
 
