@@ -61,19 +61,14 @@ func (s *Server) rpcServer() {
 			logData, _ := query.MarshalJSON()
 			log.Printf("[Synapse Debug] Receive Rpc Request: %s", logData)
 		}
-		var callback func(map[string]interface{}, amqp.Delivery) interface{}
-		var ok bool
 		var result interface{}
-		callback, ok = s.RpcCallbackMap[action]
+		callback, ok := s.RpcCallbackMap[action]
 		if ok {
-			result = callback(params, d)
+			result, ok = callback(params, d)
 		} else {
-			callback, ok = s.RpcCallbackMap["*"]
-			if ok {
-				result = callback(params, d)
-			} else {
-				result = nil
-			}
+
+			result = map[string]interface{}{"Error": "The Rpc Action Not Found"}
+			ok = true
 		}
 		response := simplejson.New();
 		response.Set("from", s.AppName)

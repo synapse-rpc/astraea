@@ -1,7 +1,6 @@
 package synapse
 
 import (
-	"github.com/streadway/amqp"
 	"log"
 	"github.com/bitly/go-simplejson"
 )
@@ -56,18 +55,14 @@ func (s *Server) eventServer() {
 				logData, _ := query.MarshalJSON()
 				log.Printf("[Synapse Debug] Receive Event: %s.%s %s", query.Get("from").MustString(), query.Get("action").MustString(), logData)
 			}
-			var callback func(map[string]interface{}, amqp.Delivery)
-			var ok bool
-			callback, ok = s.EventCallbackMap[query.Get("from").MustString() + "." + query.Get("action").MustString()]
+			callback, ok := s.EventCallbackMap[query.Get("from").MustString() + "." + query.Get("action").MustString()]
 			if ok {
-				callback(params, d)
-			} else {
-				callback, ok = s.EventCallbackMap["*"]
-				if ok {
-					callback(params, d)
+				if (callback(params, d)) {
+					d.Ack(false)
+				} else {
+					d.Reject(false)
 				}
 			}
-			d.Ack(false)
 		}
 	}
 }

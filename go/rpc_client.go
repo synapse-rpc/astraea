@@ -28,13 +28,13 @@ func (s *Server) rpcCallbackQueue() {
 		false,
 		nil)
 	s.failOnError(err, "Failed to Bind Rpc Exchange and Queue")
-
-	err = s.mqch.Qos(
-		1, // prefetch count
-		0, // prefetch size
-		false, // global
-	)
-	s.failOnError(err, "Failed to set Rpc Queue QoS")
+	//
+	//err = s.mqch.Qos(
+	//	1, // prefetch count
+	//	0, // prefetch size
+	//	false, // global
+	//)
+	//s.failOnError(err, "Failed to set Rpc Queue QoS")
 }
 
 func (s *Server) randomString(l int) string {
@@ -68,7 +68,7 @@ func (s *Server) rpcCallbackQueueListen() {
 /**
 RPC Clenit
  */
-func (s *Server) rpcClent(data map[string]interface{}, result chan map[string]interface{}) {
+func (s *Server) rpcClient(data map[string]interface{}, result chan map[string]interface{}) {
 	query := simplejson.New();
 	query.Set("from", s.AppName)
 	query.Set("to", data["appName"].(string))
@@ -123,7 +123,7 @@ func (s *Server) SendRpc(appName, action string, params map[string]interface{}) 
 		"params": params,
 	}
 	result := make(chan map[string]interface{})
-	go s.rpcClent(data, result)
+	go s.rpcClient(data, result)
 	select {
 	case ret := <-result:
 		return ret
