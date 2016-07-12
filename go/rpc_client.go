@@ -62,6 +62,12 @@ func (s *Server) rpcCallbackQueueListen() {
 		nil, // args
 	)
 	s.failOnError(err, "Failed to register Rpc Callback consumer")
+	err = s.mqch.Qos(
+		1, // prefetch count
+		0, // prefetch size
+		false, // global
+	)
+	s.failOnError(err, "Failed to set Rpc Queue QoS")
 	log.Printf("[Synapse Info] Rpc Client Handler Listening")
 }
 

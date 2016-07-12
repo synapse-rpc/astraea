@@ -34,6 +34,6 @@ class Synapse(EventServer,EventClient,RpcServer,RpcClient):
             self.log("[Synapse Warn] Event Sender Disabled: disable_event_client set True")
         if self.disable_rpc_client:
             self.log("[Synapse Warn] Rpc Sender Disabled: disable_rpc_client set True")
-        else:
-            self.rpc_client_queue()
+        # else:
+        #     self.rpc_client_queue()
     
