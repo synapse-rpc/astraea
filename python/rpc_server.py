@@ -7,9 +7,10 @@ import pika
 class RpcServer(Base):
     @classmethod
     def rpc_server_queue(self):
-        self.mqch.queue_declare(queue=self.sys_name+"_rpc_srv_" + self.app_name, durable=True,auto_delete=True)
+        self.mqch.queue_declare(queue=self.sys_name + "_rpc_srv_" + self.app_name, durable=True, auto_delete=True)
         for k in self.event_callback_map.keys():
-            self.mqch.queue_bind(exchange=self.sys_name, queue=self.sys_name+"_rpc_srv_" + self.app_name,routing_key="rpc.srv."+self.app_name)
+            self.mqch.queue_bind(exchange=self.sys_name, queue=self.sys_name + "_rpc_srv_" + self.app_name,
+                                 routing_key="rpc.srv." + self.app_name)
 
     @classmethod
     def rpc_server_serve(self):
@@ -34,15 +35,16 @@ class RpcServer(Base):
                 "params": ret
             })
             ch.basic_publish(exchange=self.sys_name,
-                     routing_key=properties.reply_to,
-                     properties=pika.BasicProperties(correlation_id = \
-                                                         properties.correlation_id),
-                     body=responseJSON)
+                             routing_key=properties.reply_to,
+                             properties=pika.BasicProperties(correlation_id= \
+                                                                 properties.correlation_id),
+                             body=responseJSON)
             if self.debug:
                 self.log("[Synapse Debug] Reply Rpc Request: %s" % (responseJSON))
-            ch.basic_ack(delivery_tag = method.delivery_tag)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+
         self.mqch.basic_qos(prefetch_count=1)
         self.mqch.basic_consume(callback,
-                                queue=self.sys_name+"_rpc_srv_" + self.app_name)
+                                queue=self.sys_name + "_rpc_srv_" + self.app_name)
         self.log('[Synapse Info] Rpc Server Handler Listening')
         self.mqch.start_consuming()
