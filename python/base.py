@@ -1,7 +1,8 @@
 # coding: utf-8
- 
+
 import time
 import pika
+
 
 class Base:
     debug = False
@@ -23,7 +24,7 @@ class Base:
     def log(self, msg):
         print(time.strftime("%Y/%m/%d %H:%M:%S"), msg)
 
-    def __init__(self, app_name,sys_name, mq_host, mq_port, mq_user, mq_pass, debug,
+    def __init__(self, app_name, sys_name, mq_host, mq_port, mq_user, mq_pass, debug,
                  disable_rpc_client, disable_event_client, event_callback_map, rpc_callback_map):
         self.app_name = app_name
         self.sys_name = sys_name
