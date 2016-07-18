@@ -11,6 +11,7 @@ type Server struct {
 	DisableRpcClient   bool
 	DisableEventClient bool
 	AppName            string
+	AppId              string
 	SysName            string
 	MqHost             string
 	MqPort             string
@@ -44,6 +45,10 @@ func (s *Server) Serve() {
 		log.Print("[Synapse Info] System App Name: " + s.SysName)
 		log.Print("[Synapse Info] System App Name: " + s.AppName)
 	}
+	if s.AppId == "" {
+		s.AppId = s.randomString(20)
+	}
+	log.Print("[Synapse Info] System App ID: " + s.AppId)
 	forever := make(chan bool)
 	if s.Debug {
 		log.Print("[Synapse Warn] System Run Mode: Debug")

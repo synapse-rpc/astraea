@@ -12,7 +12,7 @@ import (
  */
 func (s *Server) rpcCallbackQueue() {
 	q, err := s.mqch.QueueDeclare(
-		s.SysName + "_rpc_cli_" + s.AppName, // name
+		s.SysName + "_rpc_cli_" + s.AppName + "_" + s.AppId, // name
 		true, // durable
 		true, // delete when usused
 		false, // exclusive
@@ -23,20 +23,16 @@ func (s *Server) rpcCallbackQueue() {
 
 	err = s.mqch.QueueBind(
 		q.Name,
-		"rpc.cli." + s.AppName,
+		"rpc.cli." + s.AppName + "." + s.AppId,
 		s.SysName,
 		false,
 		nil)
 	s.failOnError(err, "Failed to Bind Rpc Exchange and Queue")
-	//
-	//err = s.mqch.Qos(
-	//	1, // prefetch count
-	//	0, // prefetch size
-	//	false, // global
-	//)
-	//s.failOnError(err, "Failed to set Rpc Queue QoS")
 }
 
+/**
+生成随机字符串
+ */
 func (s *Server) randomString(l int) string {
 	bytes := make([]byte, l)
 	for i := 0; i < l; i++ {
@@ -44,6 +40,10 @@ func (s *Server) randomString(l int) string {
 	}
 	return string(bytes)
 }
+
+/**
+生成随机数
+ */
 func (s *Server) randInt(min int, max int) int {
 	return min + rand.Intn(max - min)
 }
@@ -53,7 +53,7 @@ func (s *Server) randInt(min int, max int) int {
  */
 func (s *Server) rpcCallbackQueueListen() {
 	s.cli, err = s.mqch.Consume(
-		s.SysName + "_rpc_cli_" + s.AppName, // queue
+		s.SysName + "_rpc_cli_" + s.AppName + "_" + s.AppId, // queue
 		"", // consumer
 		false, // auto-ack
 		false, // exclusive
@@ -90,7 +90,7 @@ func (s *Server) rpcClient(data map[string]interface{}, result chan map[string]i
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: corrId,
-			ReplyTo:       "rpc.cli." + s.AppName,
+			ReplyTo:       "rpc.cli." + s.AppName + "." + s.AppId,
 			Body:          []byte(queryJson),
 		})
 	s.failOnError(err, "Failed to publish Rpc Request")
