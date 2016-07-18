@@ -50,12 +50,13 @@ func (s *Server) Serve() {
 		s.AppId = s.randomString(20)
 	}
 	log.Print("[Synapse Info] System App ID: " + s.AppId)
-	forever := make(chan bool)
 	if s.Debug {
 		log.Print("[Synapse Warn] System Run Mode: Debug")
 	} else {
 		log.Print("[Synapse Info] System Run Mode: Production")
 	}
+	goto START
+	START:
 	s.createConnection()
 	defer s.conn.Close()
 	s.createChannel()
@@ -86,7 +87,10 @@ func (s *Server) Serve() {
 	} else {
 		log.Printf("[Synapse Warn] Rpc Sender Disabled: DisableRpcClient set true")
 	}
-	<-forever
+	var closedConnChannel = s.conn.NotifyClose(make(chan *amqp.Error))
+	log.Printf("[Synapse Error] Connection Error: %s , reconnect after 5 sec", <-closedConnChannel)
+	time.Sleep(5 * time.Second)
+	goto START
 }
 
 /**

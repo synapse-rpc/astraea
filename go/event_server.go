@@ -3,6 +3,7 @@ package synapse
 import (
 	"log"
 	"github.com/bitly/go-simplejson"
+	"strings"
 )
 
 /**
@@ -55,14 +56,12 @@ func (s *Server) eventServer() {
 				logData, _ := query.MarshalJSON()
 				log.Printf("[Synapse Debug] Receive Event: %s.%s %s", query.Get("from").MustString(), query.Get("action").MustString(), logData)
 			}
-			callback, ok := s.EventCallbackMap[query.Get("from").MustString() + "." + query.Get("action").MustString()]
-			if ok {
-				if (callback(params, d)) {
-					d.Ack(false)
-				} else {
-					d.Reject(false)
-				}
+			callback, ok := s.EventCallbackMap[strings.Split(query.Get("from").MustString(), ".")[0] + "." + query.Get("action").MustString()]
+			if (ok && callback(params, d)) {
+				d.Ack(false)
+				return
 			}
+			d.Reject(true)
 		}
 	}
 }
