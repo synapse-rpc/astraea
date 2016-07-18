@@ -4,6 +4,7 @@ import (
 	"github.com/streadway/amqp"
 	"log"
 	"time"
+	"math/rand"
 )
 
 type Server struct {
@@ -130,4 +131,19 @@ func (s *Server) failOnError(err error, msg string) {
 	if err != nil {
 		log.Fatalf("[Synapse Error] %s: %s \n", msg, err)
 	}
+}
+
+/**
+生成随机字符串
+ */
+func (s *Server) randomString(l int) string {
+	str := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	bytes := []byte(str)
+	result := []byte{}
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := 0; i < l; i++ {
+		result = append(result, bytes[r.Intn(len(bytes))])
+	}
+	return string(result)
+
 }

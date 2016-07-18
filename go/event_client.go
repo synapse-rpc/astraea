@@ -14,7 +14,7 @@ func (s *Server) SendEvent(eventName string, params map[string]interface{}) {
 		log.Printf("[Synapse Error] %s: %s \n", "Event Send Not Success", "DisableEventClient set true")
 	} else {
 		query := simplejson.New();
-		query.Set("from", s.AppName)
+		query.Set("from", s.AppName + "." + s.AppId)
 		query.Set("to", "event")
 		query.Set("action", eventName)
 		query.Set("params", params)

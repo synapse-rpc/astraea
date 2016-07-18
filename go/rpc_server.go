@@ -64,12 +64,12 @@ func (s *Server) rpcServer() {
 		var result interface{}
 		callback, ok := s.RpcCallbackMap[action]
 		if ok {
-			result= callback(params, d)
+			result = callback(params, d)
 		} else {
 			result = map[string]interface{}{"Error": "The Rpc Action Not Found"}
 		}
 		response := simplejson.New();
-		response.Set("from", s.AppName)
+		response.Set("from", s.AppName + "." + s.AppId)
 		response.Set("to", query.Get("from").MustString())
 		response.Set("action", "reply-" + action)
 		response.Set("params", result)

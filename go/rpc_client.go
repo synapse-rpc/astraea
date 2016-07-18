@@ -2,7 +2,6 @@ package synapse
 
 import (
 	"log"
-	"math/rand"
 	"github.com/bitly/go-simplejson"
 	"github.com/streadway/amqp"
 	"time"
@@ -28,24 +27,6 @@ func (s *Server) rpcCallbackQueue() {
 		false,
 		nil)
 	s.failOnError(err, "Failed to Bind Rpc Exchange and Queue")
-}
-
-/**
-生成随机字符串
- */
-func (s *Server) randomString(l int) string {
-	bytes := make([]byte, l)
-	for i := 0; i < l; i++ {
-		bytes[i] = byte(s.randInt(65, 90))
-	}
-	return string(bytes)
-}
-
-/**
-生成随机数
- */
-func (s *Server) randInt(min int, max int) int {
-	return min + rand.Intn(max - min)
 }
 
 /**
@@ -76,7 +57,7 @@ RPC Clenit
  */
 func (s *Server) rpcClient(data map[string]interface{}, result chan map[string]interface{}) {
 	query := simplejson.New();
-	query.Set("from", s.AppName)
+	query.Set("from", s.AppName + "." + s.AppId)
 	query.Set("to", data["appName"].(string))
 	query.Set("action", data["action"])
 	query.Set("params", data["params"])
