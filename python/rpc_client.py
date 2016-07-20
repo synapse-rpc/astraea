@@ -4,42 +4,34 @@ from .base import Base
 
 
 class RpcClient(Base):
-    # @classmethod
-    # def rpc_client_queue(self):
-    #     self.mqch.queue_declare(queue=self.sys_name + "_rpc_cli_" + self.app_name, durable=True, auto_delete=True)
-    #     self.mqch.queue_bind(exchange=self.sys_name, queue=self.sys_name + "_rpc_cli_" + self.app_name,
-    #                          routing_key="rpc.cli." + self.app_name)
-    #     self.mqch.basic_consume(self.on_response, no_ack=True, queue=self.sys_name + "_rpc_cli_" + self.app_name)
-
     response = None
 
     @classmethod
     def send_rpc(self, app_name, action, params):
         print("Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
-        self.mqch.queue_declare(queue=self.sys_name + "_rpc_cli_" + self.app_name, durable=True,
+        self.mqch.queue_declare(queue=self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id, durable=True,
                                 auto_delete=True)
-        self.mqch.queue_bind(exchange=self.sys_name, queue=self.sys_name + "_rpc_cli_" + self.app_name,
-                             routing_key="rpc.cli." + self.app_name)
-        self.mqch.basic_consume(self.on_response, no_ack=True, queue=self.sys_name + "_rpc_cli_" + self.app_name)
+        self.mqch.queue_bind(exchange=self.sys_name,
+                             queue=self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id,
+                             routing_key="rpc.cli." + self.app_name + "." + self.app_id)
+        self.mqch.basic_consume(self.on_response, no_ack=True,
+                                queue=self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id)
 
         self.response = None
         self.corr_id = str(uuid.uuid4())
         data = {
-            "from": self.app_name,
+            "from": self.app_name + "." + self.app_id,
             "to": app_name,
             "action": action,
             "params": params
         }
-        print(data)
         self.mqch.basic_publish(exchange=self.sys_name,
                                 routing_key="rpc.srv." + app_name,
                                 properties=pika.BasicProperties(
-                                    reply_to="rpc.cli." + self.app_name,
+                                    reply_to="rpc.cli." + self.app_name + "." + self.app_id,
                                     correlation_id=self.corr_id,
                                 ),
                                 body=json.dumps(data))
-        print('sdfsdf')
-
         while self.response is None:
             self.conn.process_data_events()
         return self.response

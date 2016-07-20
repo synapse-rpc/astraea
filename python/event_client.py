@@ -10,7 +10,7 @@ class EventClient(Base):
             self.log("[Synapse Error] Event Send Not Success: DisableEventClient set true")
         else:
             data = {
-                "from": self.app_name,
+                "from": self.app_name + "." + self.app_id,
                 "to": "event",
                 "action": action,
                 "params": params
