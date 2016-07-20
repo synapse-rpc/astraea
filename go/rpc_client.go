@@ -100,7 +100,7 @@ func (s *Server) rpcClient(data map[string]interface{}, result chan map[string]i
 发起 RPC请求
  */
 func (s *Server) SendRpc(appName, action string, params map[string]interface{}) map[string]interface{} {
-	if s.DisableEventClient {
+	if s.DisableRpcClient {
 		log.Printf("[Synapse Error] %s: %s \n", "Rpc Request Not Send", "DisableRpcClient set true")
 		return map[string]interface{}{"Error":"Rpc Request Not Send: DisableRpcClient set true"}
 	}
