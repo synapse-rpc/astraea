@@ -56,12 +56,13 @@ func (s *Server) eventServer() {
 				logData, _ := query.MarshalJSON()
 				log.Printf("[Synapse Debug] Receive Event: %s.%s %s", query.Get("from").MustString(), query.Get("action").MustString(), logData)
 			}
+			log.Print(strings.Split(query.Get("from").MustString(), ".")[0] + "." + query.Get("action").MustString())
 			callback, ok := s.EventCallbackMap[strings.Split(query.Get("from").MustString(), ".")[0] + "." + query.Get("action").MustString()]
 			if (ok && callback(params, d)) {
 				d.Ack(false)
-				return
+			} else {
+				d.Reject(true)
 			}
-			d.Reject(true)
 		}
 	}
 }
