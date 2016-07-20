@@ -7,8 +7,7 @@ class RpcClient(Base):
     response = None
 
     @classmethod
-    def send_rpc(self, app_name, action, params):
-        print("Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
+    def listen_rpc_cli(self):
         self.mqch.queue_declare(queue=self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id, durable=True,
                                 auto_delete=True)
         self.mqch.queue_bind(exchange=self.sys_name,
@@ -16,6 +15,11 @@ class RpcClient(Base):
                              routing_key="rpc.cli." + self.app_name + "." + self.app_id)
         self.mqch.basic_consume(self.on_response, no_ack=True,
                                 queue=self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id)
+        self.log("[Synapse Info] Rpc Client Handler Listening")
+
+    @classmethod
+    def send_rpc(self, app_name, action, params):
+        print("Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
 
         self.response = None
         self.corr_id = str(uuid.uuid4())
