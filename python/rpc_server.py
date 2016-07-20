@@ -14,22 +14,19 @@ class RpcServer(Base):
 
     @classmethod
     def rpc_server_serve(self):
-        if "*" not in self.rpc_callback_map.keys():
-            self.log("[Synapse Error] Rpc Handler Must have * to handle unknow Request")
-            exit
         self.rpc_server_queue()
 
         def callback(ch, method, properties, body):
             data = json.loads(body.decode())
             if data["action"] not in self.rpc_callback_map.keys():
-                act = "*"
+                ret = {"Error": "The Rpc Action Not Found"}
             else:
                 act = data["action"]
-            if self.debug:
-                self.log("[Synapse Debug] Receive Rpc Request: %s" % (data))
-            ret = self.rpc_callback_map[act](data["params"], body)
+                if self.debug:
+                    self.log("[Synapse Debug] Receive Rpc Request: %s" % (data))
+                ret = self.rpc_callback_map[act](data["params"], body)
             responseJSON = json.dumps({
-                "from": self.app_name,
+                "from": self.app_name + "." + self.app_id,
                 "to": data["from"],
                 "action": "reply-%s" % (data["action"]),
                 "params": ret
