@@ -18,13 +18,19 @@ class RpcServer(Base):
 
         def callback(ch, method, properties, body):
             data = json.loads(body.decode())
+            ret = {"code": 200, "message": "OK"}
             if data["action"] not in self.rpc_callback_map.keys():
-                ret = {"Error": "The Rpc Action Not Found"}
+                ret["code"] = 404
+                ret["message"] = "The Rpc Action Not Found"
             else:
                 act = data["action"]
                 if self.debug:
                     self.log("[Synapse Debug] Receive Rpc Request: %s" % (data))
-                ret = self.rpc_callback_map[act](data["params"], body)
+                ret_source = self.rpc_callback_map[act](data["params"], body)
+                if "code" in ret_source.keys() and "message" not in ret_source.keys():
+                    ret_source["message"] = "code (%d), no more message" % (ret_source["code"])
+                for k in ret_source:
+                    ret[k] = ret_source[k]
             responseJSON = json.dumps({
                 "from": self.app_name + "." + self.app_id,
                 "to": data["from"],
