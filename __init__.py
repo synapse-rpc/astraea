@@ -69,7 +69,7 @@ class RpcClient(RpcBase):
     """
 
     def __init__(self, client_name=None, sys_name=None, **kwargs):
-        super(self.__class__, self).__init__(**kwargs)
+        super(RpcClient, self).__init__(**kwargs)
 
         if client_name is None:
             self.client_name = str(uuid.uuid4())
@@ -90,6 +90,7 @@ class RpcClient(RpcBase):
         :param app: which app will be process this request, RPC server bind this
         :param action: It's a function will be call for remote app
         :param params: It's the params will be used by function
+        :param timeout: waiting for response timeout timer
 
         """
         if app is None:
@@ -169,7 +170,7 @@ class RpcServer(RpcBase):
     """
 
     def __init__(self, app=None, sys_name=None, **kwargs):
-        super(self.__class__, self).__init__(**kwargs)
+        super(RpcServer, self).__init__(**kwargs)
 
         if app is None:
             logging.error('Param `app` should be pass')
@@ -187,7 +188,7 @@ class RpcServer(RpcBase):
 
         #: Key is `str`, client will call this name to process request, value is the func object
         #: HaHa _ is just for fun and pycharm get it mean.
-        self.callback_map = {'_': lambda x: {'msg': 'success', 'failed': True}, }
+        self.callback_map = {'_': lambda x: {'msg': 'success', 'failed': True},}
 
     def serve(self):
         """Serve for waiting request, process and response it.
@@ -216,7 +217,7 @@ class RpcServer(RpcBase):
         else:
             func = request.get('action', None)
             if func not in self.callback_map:
-                logging.error('Request action <%s> was not register by server.')
+                logging.error('Request action <%s> was not register by server.' % (func,))
                 response = {'error': 'Request action <%s> was not register by server.' % func,
                             'failed': True}
             else:
@@ -270,20 +271,88 @@ class RpcServer(RpcBase):
         return decorator
 
 
-class EventClient(RpcBase):
-    pass
+class EventClient(RpcClient):
+    """Event client most likely Rpc client, except Event client needless to get response.
+
+    So I decide inherit from :class: `RpcClient` .
+    """
+    def __init__(self, **kwargs):
+        super(EventClient, self).__init__(**kwargs)
+
+    def call(self, app=None, action=None, params=None, timeout=3):
+        """Make a request and send to mq.
+
+        Use params to create a request, request is a dict and can be serialized as json, like rpc client
+        example {'app': 'cmdb', 'action': 'asset_add', 'params': {'id': 123, 'name': 'localhost', ...}
+
+        :param app: which app will be get this event, event server bind this
+        :param action: It's a function will be call for remote app
+        :param params: It's the params will be used by function
+        :param timeout: None of business for event client
+        """
+        if app is None:
+            logging.error('Param `app` should be a passed')
+            return {'error': 'Param `app` should be a passed'}
+
+        if action is None:
+            logging.error('Param `action` should be a passed')
+            return {'error': 'Param `action` should be a passed'}
+
+        if params is None:
+            params = {}
+
+        if not isinstance(params, dict):
+            logging.error('Param `params` should be a dict')
+            return {'error': 'Param `request` should be a dict'}
+
+        request = {
+            'from': self.client_name,
+            'to': app,
+            'action': action,
+            'params': params,
+        }
+        try:
+            request = json.dumps(request)
+        except TypeError:
+            logging.error('`request` should be serialize failed')
+            return {'error': '`request` should be serialize failed'}
+
+        logging.info('Send event to: %s call action: %s params: %s' % (app, action, params))
+
+        #: Publish request to MQ exchange, routing key is __rpc__ + app the server binding
+        self.channel.basic_publish(exchange=self.sys_name,
+                                   routing_key='__event__' + app,
+                                   body=request)
+        logging.info('Send event finished .')
+        return {'msg': 'Send event finished'}
 
 
-class EventServer(RpcBase):
-    pass
+class EventServer(RpcServer):
+    """Event server most like RpcServer, but difference more, I decide rewrite it.
+
+    """
+    def __init__(self, **kwargs):
+        super(EventServer, self).__init__(**kwargs)
+
+        self.queue = '__event__' + self.app
+
+    def _on_request(self, ch, method, props, body):
+        """Event server needn't return any response, just process it and confirm get it.
+        """
+
+        self._process_request(body)
+        self.channel.basic_ack(delivery_tag=method.delivery_tag)
+        logging.info('Finish process event: <%s>' % (body,))
 
 
 if __name__ == '__main__':
     import threading
     logging.basicConfig(level=logging.INFO)
     rpc_server = RpcServer(app='cmdb')
+    event_server = EventServer(app='cmdb')
 
     @rpc_server.callback('asset_list')
+    @event_server.callback('asset_list')
     def asset_list(arg):
         return {'msg': {'name': 'asset_list',
                         'assets': [{'id': 1, 'ip': '172.16.1.2', 'assst_name': 'localhost'},
@@ -291,9 +360,17 @@ if __name__ == '__main__':
                                    ]
                         },
                 'failed': False}
+
     t = threading.Thread(target=rpc_server.serve, args=())
     t.daemon = True
     t.start()
+
+    t2 = threading.Thread(target=event_server.serve, args=())
+    t2.daemon = True
+    t2.start()
+
+    print('*' * 100)
+
     rpc_client = RpcClient()
     threads = []
     for i in range(1, 5):
@@ -303,3 +380,17 @@ if __name__ == '__main__':
 
     for i in threads:
         i.join()
+
+    print('*' * 100)
+
+    event_client = EventClient()
+    threads = []
+    for i in range(1, 5):
+        t = threading.Thread(target=event_client.call, args=('cmdb', 'asset_list', {}))
+        t.start()
+        threads.append(t)
+
+    for i in threads:
+        i.join()
+
+    time.sleep(5)
