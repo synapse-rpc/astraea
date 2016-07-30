@@ -68,9 +68,8 @@ class RpcClient(RpcBase):
     :param sys_name: It's will be use a exchange name of MQ  default JMS
     """
 
-    def __init__(self, mq_host='localhost', mq_port=5672, mq_user=None, mq_pass=None,
-                 client_name=None, sys_name=None):
-        super(RpcClient, self).__init__(mq_host, mq_port, mq_user, mq_pass)
+    def __init__(self, client_name=None, sys_name=None, **kwargs):
+        super(self.__class__, self).__init__(**kwargs)
 
         if client_name is None:
             self.client_name = str(uuid.uuid4())
@@ -140,9 +139,9 @@ class RpcClient(RpcBase):
         self.channel.basic_consume(on_response, no_ack=True,
                                    queue=callback_queue)
 
-        #: Publish request to MQ
+        #: Publish request to MQ exchange, routing key is __rpc__ + app the server binding
         self.channel.basic_publish(exchange=self.sys_name,
-                                   routing_key=app,
+                                   routing_key='__rpc__' + app,
                                    properties=pika.BasicProperties(
                                        reply_to=callback_queue,
                                        correlation_id=corr_id
@@ -169,9 +168,8 @@ class RpcServer(RpcBase):
 
     """
 
-    def __init__(self, app=None, mq_host='localhost', mq_port=5672,
-                 mq_user=None, mq_pass=None, sys_name=None):
-        super(RpcServer, self).__init__(mq_host, mq_port, mq_user, mq_pass)
+    def __init__(self, app=None, sys_name=None, **kwargs):
+        super(self.__class__, self).__init__(**kwargs)
 
         if app is None:
             logging.error('Param `app` should be pass')
@@ -179,20 +177,32 @@ class RpcServer(RpcBase):
         else:
             self.app = app
 
+        #: Use __rpc__ and app to tag rpc queue, __event__ and app for event queue
+        self.queue = '__rpc__' + self.app
+
         if sys_name is None:
             self.sys_name = 'JMS'
         else:
             self.sys_name = sys_name
 
+        #: Key is `str`, client will call this name to process request, value is the func object
+        #: HaHa _ is just for fun and pycharm get it mean.
         self.callback_map = {'_': lambda x: {'msg': 'success', 'failed': True}, }
 
     def serve(self):
+        """Serve for waiting request, process and response it.
+
+        . Declare exchange
+        . Declare queue
+        . Binding key to queue
+        . Consume it
+        """
         self.channel.exchange_declare(exchange=self.sys_name, exchange_type='topic')
-        self.channel.queue_declare(queue=self.app, durable=True, auto_delete=True)
-        self.channel.queue_bind(exchange=self.sys_name, queue=self.app, routing_key=self.app)
+        self.channel.queue_declare(queue=self.queue, durable=True, auto_delete=True)
+        self.channel.queue_bind(exchange=self.sys_name, queue=self.queue, routing_key=self.queue)
 
         self.channel.basic_qos(prefetch_count=1)
-        self.channel.basic_consume(self._on_request, queue=self.app)
+        self.channel.basic_consume(self._on_request, queue=self.queue)
 
         print(' [x] Awaiting RPC requests')
         self.channel.start_consuming()
@@ -261,6 +271,10 @@ class RpcServer(RpcBase):
 
 
 class EventClient(RpcBase):
+    pass
+
+
+class EventServer(RpcBase):
     pass
 
 
