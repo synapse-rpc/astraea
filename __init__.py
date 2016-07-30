@@ -16,6 +16,7 @@ import uuid
 import sys
 import json
 import logging
+import time
 
 
 class RpcBase(object):
@@ -81,7 +82,7 @@ class RpcClient(RpcBase):
         else:
             self.sys_name = sys_name
 
-    def call(self, app=None, action=None, params=None):
+    def call(self, app=None, action=None, params=None, timeout=3):
         """Make a request and send to mq.
 
         Use params to create a request, request is a dict and can be serialized as json,
@@ -148,8 +149,10 @@ class RpcClient(RpcBase):
                                    ),
                                    body=request)
 
-        while self.response.get(corr_id, None) is None:
-            self.connection.process_data_events(time_limit=2)
+        start = end = time.time()
+        while self.response.get(corr_id, None) is None and end - start < timeout:
+            self.connection.process_data_events(time_limit=1)
+            end = time.time()
         rv = self.response.pop(corr_id)
         logging.info('Request <%s> get response %s.' % (corr_id, rv,))
         return rv
@@ -275,6 +278,7 @@ if __name__ == '__main__':
                         },
                 'failed': False}
     t = threading.Thread(target=rpc_server.serve, args=())
+    t.daemon = True
     t.start()
     rpc_client = RpcClient()
     threads = []
