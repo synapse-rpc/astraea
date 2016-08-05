@@ -26,7 +26,7 @@ from kombu.utils import uuid
 
 
 class Synapse(object):
-    default_config = {
+    config = {
         'MQ_HOST': 'localhost',
         'MQ_PORT': 5672,
         'MQ_USER': None,
@@ -37,18 +37,19 @@ class Synapse(object):
     def __init__(self, app_name, app_id=None):
         self.app_name = app_name
         self.app_id = app_id or uuid()
-        self.config = self.default_config
-        self.connection = None
-        self.rpc_server = None
-        self.rpc_client = None
-        self.event_server = None
-        self.event_client = None
+        self.connection = self.make_connection()
+        self.rpc_server = RpcServer(self.connection, self.app_name, self.app_id)
+        self.rpc_client = RpcClient(self.connection, self.app_name, self.app_id)
 
-    def send_rpc(self, request_app=None, action=None, params=None, timeout=3):
-        self.rpc_client.send_rpc(request_app, action=action, params=params, timeout=timeout)
+    def send_rpc(self, *args, **kwargs):
+        self.rpc_client.send_rpc(*args, **kwargs)
 
     def send_event(self):
         pass
+
+    @property
+    def rpc_callback(self):
+        return self.rpc_server.callback
 
     def make_connection(self):
         if self.config.get('MQ_USER', None) is None:
@@ -98,6 +99,12 @@ class RpcServer(ConsumerMixin):
     :param sys_name: It's will be use a exchange name of MQ  default JMS
 
     """
+
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '_instance'):
+            orig = super(RpcServer, cls)
+            cls._instance = orig.__new__(cls, *args, **kwargs)
+        return cls._instance
 
     def __init__(self, connection, app_name, app_id=None, sys_name='JMS'):
         #: Use __rpc__ and app to tag rpc queue, __event__ and app for event queue
@@ -167,23 +174,24 @@ class RpcServer(ConsumerMixin):
         super(RpcServer, self).run(_tokens)
 
     def _process_request(self, body):
-        print(body)
         try:
             request = json.loads(body)
         except TypeError:
             logging.error('Request <%s> unserialized failed' % (body,))
             response = {'error': 'Request <%s> unserialized failed', 'failed': True}
         else:
-            func = request.get('action', None)
-            if func not in self.callback_map:
-                print(func)
-                print(self.callback_map)
+            func = request.get('func', None)
+            method = request.get('method', 'GET')
+            func_full_name = '%s.%s' % (func, method.lower())
+            args = request.get('args', ())
+            kwargs = request.get('kwargs', {})
+            if func_full_name not in self.callback_map:
                 logging.error('Request action %s was not register by server.' % (func,))
                 response = {'error': 'Request action <%s> was not register by server.' % func,
                             'failed': True}
             else:
                 try:
-                    response = self.callback_map.get(func, None)(request.get('params', {}))
+                    response = self.callback_map.get(func_full_name, None)(*args, **kwargs)
                 except TypeError as e:
                     logging.error('Call function failed: %s' % (e,))
                     response = {'error': 'Call function failed: %s' % (e,), 'failed': True}
@@ -271,15 +279,20 @@ class RpcClient(object):
         self.exchange.maybe_bind(channel)
         self.queue.maybe_bind(channel)
 
-    def send_rpc(self, request_app=None, action=None, params=None, timeout=3):
+    def send_rpc(self, request_app=None, func=None, method='GET', args=None, kwargs=None, timeout=3):
         """Make a request and send to mq.
 
         Use params to create a request, request is a dict and can be serialized as json,
-        example {'app': 'cmdb', 'action': 'asset_add', 'params': {'id': 123, 'name': 'localhost', ...}
+
+        example: self.send_rpc('cmdb', func='asset_list',
+                                method='GET', args=('hello', 'world'),
+                                kwargs={'asset_name': 'localhost'})
 
         :param request_app: which app will be process this request, RPC server bind this
-        :param action: It's a function will be call for remote app
-        :param params: It's the params will be used by function
+        :param func: It's a function will be call for remote app
+        :param method: GET, POST, HEAD etc, will pass to function
+        :param args: It's will be pass into func as args
+        :param kwargs: It's will be pass into func as kwargs
         :param timeout: waiting for response timeout timer
 
         """
@@ -287,22 +300,13 @@ class RpcClient(object):
             logging.error('Param `request_app` should be passed')
             return {'error': 'Param `request_app` should be  passed'}
 
-        if action is None:
-            logging.error('Param `action` should be a passed')
-            return {'error': 'Param `action` should be a passed'}
-
-        if params is None:
-            params = {}
-
-        if not isinstance(params, dict):
-            logging.error('Param `params` should be a dict')
-            return {'error': 'Param `request` should be a dict'}
-
         request = {
             'from': '%s.%s' % (self.app_name, self.app_id),
             'to': request_app,
-            'action': action,
-            'params': params,
+            'func': func,
+            'method': method,
+            'args': args or (),
+            "kwargs": kwargs or {},
         }
 
         try:
@@ -311,7 +315,14 @@ class RpcClient(object):
             logging.error('`request` should be serialize failed')
             return {'error': '`request` should be serialize failed'}
 
-        logging.info('Send request to: %s call action: %s params: %s' % (request_app, action, params))
+        logging.info('Send request to: %s call %s(%s, %s, method=%s)' %
+                     (request_app,
+                      func,
+                      ','.join(args),
+                      ','.join(['%s=%s' % (k, v)
+                                for k, v in kwargs.items()]),
+                      method.lower(),
+                      ))
 
         with producers[self.connection].acquire(block=True) as producer:
             corr_id = uuid()

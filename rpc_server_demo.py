@@ -11,20 +11,13 @@ logging.basicConfig(level=logging.INFO)
 app = Synapse('cmdb', app_id='BSDS')
 
 
-#@app.rpc_server.callback('asset_list', methods=['GET'])
-def asset_list(arg):
-    return {'msg': {'name': 'asset_list',
-                    'assets': [{'id': 1, 'ip': '172.16.1.2', 'assst_name': 'localhost'},
-                               {'id': 2, 'ip': '172.16.1.3', 'asset_name': 'localhost'},
-                               ]
-                    },
-            'failed': False}
+@app.rpc_server.callback(methods=['GET', 'POST'])
+def asset_list(asset_name, asset_id, zone="hz"):
+
+    return "%s.%s zone: %s" % (asset_name, asset_id, zone)
 
 
 if __name__ == '__main__':
-    app.rpc_server.callback_map = {
-        'asset_list.get': asset_list,
-    }
-    #app.rpc_server.add_callback_map(asset_list, 'asset_list.get')
+
     print(app.rpc_server.callback_map)
-    app.run(1)
+    app.run(process_num=10)

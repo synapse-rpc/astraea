@@ -10,7 +10,7 @@ app.make_connection()
 print(app.rpc_server.callback_map)
 print(app.connection)
 
-a = app.rpc_client.send_rpc('cmdb', 'asset_list.get', {})
+a = app.send_rpc('cmdb', func='asset_list', method='GET', args=('asdf', 'asdf'), kwargs={})
 print(a)
 
 
