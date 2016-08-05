@@ -11,18 +11,18 @@
     :License: GNU v2, see LICENSE for more details.
 """
 
-import pika
-import kombu
-import sys
-from multiprocessing import Process
-import threading
+from __future__ import absolute_import, unicode_literals
+
 import json
 import logging
-import time
-from kombu import Exchange, Queue, Connection, Consumer, Producer
+import threading
+import socket
+from multiprocessing import Process
+
+from kombu import Exchange, Queue, Connection, Consumer
 from kombu.mixins import ConsumerMixin
 from kombu.pools import producers
-from kombu.utils import kwdict, reprcall, uuid
+from kombu.utils import uuid
 
 
 class Synapse(object):
@@ -37,18 +37,12 @@ class Synapse(object):
     def __init__(self, app_name, app_id=None):
         self.app_name = app_name
         self.app_id = app_id or uuid()
-        self.config = {}
+        self.config = self.default_config
         self.connection = None
+        self.rpc_server = None
+        self.rpc_client = None
         self.event_server = None
         self.event_client = None
-
-    @property
-    def rpc_server(self):
-        return RpcServer(self.connection, self.app_name, self.app_id)
-
-    @property
-    def rpc_client(self):
-        return RpcClient(self.connection, self.app_name, self.app_id)
 
     def send_rpc(self, request_app=None, action=None, params=None, timeout=3):
         self.rpc_client.send_rpc(request_app, action=action, params=params, timeout=timeout)
@@ -67,6 +61,7 @@ class Synapse(object):
                                                  self.config.get('MQ_PORT', 5672))
 
         self.connection = rv = Connection(amqp_uri, insist=True, ssl=False)
+        assert rv is not None, "Create connection will MQ server error"
         return rv
 
     def get_channel(self):
@@ -79,12 +74,12 @@ class Synapse(object):
         try:
             for j in range(process_num):
                 process = Process(target=self.rpc_server.run, args=())
-                process.daemon = True
                 process.start()
                 processes.append(process)
                 print('[%s] Awaiting RPC requests' % (j,))
 
-            time.sleep(9999)
+            for p in processes:
+                p.join()
 
         finally:
             self.close()
@@ -112,13 +107,13 @@ class RpcServer(ConsumerMixin):
         self.sys_name = sys_name
 
         self.queue_name = '%s_rpc_srv_%s' % (self.sys_name, self.app_name)
-        self.routing_key = 'rpc.srv.%s' % (self.app_name,)
+        self.binding_key = 'rpc.srv.%s' % (self.app_name,)
 
         self.exchange = Exchange(sys_name, type='topic', durable=True)
 
         self.queue = Queue(self.queue_name,
                            exchange=self.exchange,
-                           routing_key=self.queue_name,
+                           routing_key=self.binding_key,
                            durable=True,
                         )
         #: Key is `str`, client will call this name to process request, value is the func object
@@ -128,15 +123,17 @@ class RpcServer(ConsumerMixin):
     def declare(self):
         channel = self.connection.channel()
         self.exchange.maybe_bind(channel)
+        self.exchange.declare()
         self.queue.maybe_bind(channel)
-
-    def get_consumers(self, _, channel):
-        return [
-            Consumer(self.queue_name, callbacks=[self.on_message], accept=['json']),
-        ]
+        self.queue.declare()
+        print("Declare exchange and queue ...")
 
     def response(self, result, message):
         props = message.properties
+        print('start response')
+        print(props.get('reply_to'))
+        print(props.get('correlation_id'))
+        print(result)
         with producers[self.connection].acquire(block=True) as producer:
             producer.publish(result,
                              serializer='json',
@@ -144,7 +141,7 @@ class RpcServer(ConsumerMixin):
                              exchange=self.exchange,
                              routing_key=props.get('reply_to'),
                              correlation_id=props.get('correlation_id'))
-        message.ack()
+        print('end response')
 
     def on_message(self, body, message):
         logging.info('Start process message: %s' % (body,))
@@ -152,7 +149,12 @@ class RpcServer(ConsumerMixin):
         self.response(result, message)
         message.ack()
 
-    def run(self, _tokens=1):
+    def get_consumers(self, Consumer, channel):
+        return [
+            Consumer([self.queue], callbacks=[self.on_message], accept=['json'], no_ack=False),
+        ]
+
+    def run(self, _tokens=1, **kwargs):
         """Serve for waiting request, process and response it.
 
         . Declare exchange
@@ -165,7 +167,6 @@ class RpcServer(ConsumerMixin):
         super(RpcServer, self).run(_tokens)
 
     def _process_request(self, body):
-        print('*'*9)
         print(body)
         try:
             request = json.loads(body)
@@ -175,7 +176,9 @@ class RpcServer(ConsumerMixin):
         else:
             func = request.get('action', None)
             if func not in self.callback_map:
-                logging.error('Request action <%s> was not register by server.' % (func,))
+                print(func)
+                print(self.callback_map)
+                logging.error('Request action %s was not register by server.' % (func,))
                 response = {'error': 'Request action <%s> was not register by server.' % func,
                             'failed': True}
             else:
@@ -194,6 +197,8 @@ class RpcServer(ConsumerMixin):
         return response
 
     def add_callback_map(self, func, name=None):
+        print(func)
+        print(name)
         if name is None:
             name = func.__name__
 
@@ -201,6 +206,7 @@ class RpcServer(ConsumerMixin):
             name = str(name)
 
         self.callback_map[name] = func
+        print(self.callback_map)
 
     def callback(self, name=None, methods=None):
         """A decorator that is used to register a function for callback with the gaven name.
@@ -228,8 +234,7 @@ class RpcServer(ConsumerMixin):
             methods_ = methods or ['GET']
 
             for method in methods_:
-                self.add_callback_map(func, str(name_)+method.lower())
-
+                self.add_callback_map(func, '%s.%s' % (str(name_), method.lower()))
             return func
         return decorator
 
@@ -252,11 +257,11 @@ class RpcClient(object):
         self.sys_name = sys_name
 
         self.queue_name = '%s_rpc_cli_%s_%s' % (self.sys_name, self.app_name, self.app_id)
-        self.routing_key = 'rpc.cli.%s.%s' % (self.app_name, self.app_id)
+        self.binding_key = 'rpc.cli.%s.%s' % (self.app_name, self.app_id)
         self.exchange = Exchange(name=self.sys_name, type='topic')
         self.queue = Queue(name=self.queue_name,
                            exchange=self.exchange,
-                           routing_key=self.routing_key)
+                           routing_key=self.binding_key)
         self.response = {}
 
         self.declare()
@@ -315,107 +320,37 @@ class RpcClient(object):
             producer.publish(request,
                              exchange=self.exchange,
                              routing_key='rpc.srv.%s' % (request_app,),
-                             content_type='json',
-                             reply_to=self.queue_name,
+                             serializer='json',
+                             reply_to=self.binding_key,
                              correlation_id=corr_id,
                              )
 
-        def on_response(message):
+        def on_response(body, message):
             if message.properties['correlation_id'] == corr_id:
                 self.response[corr_id] = message.payload
 
         with Consumer(self.connection,
-                      on_message=on_response,
+                      callbacks=[on_response],
                       queues=self.queue,
                       no_ack=True):
 
             while self.response.get(corr_id, None) is None :
-                self.connection.drain_events(timeout=timeout)
+                try:
+                    self.connection.drain_events(timeout=timeout)
+                except socket.timeout:
+                    logging.error('Request timeout')
+                    break
 
-            rv = self.response.pop(corr_id)
+            rv = self.response.pop(corr_id, 'timeout')
             logging.info('Request <%s> get response %s.' % (corr_id, rv,))
         return rv
 
     def close(self):
         self.connection.close()
 
-# class EventClient(RpcClient):
-#     """Event client most likely Rpc client, except Event client needless to get response.
-#
-#     So I decide inherit from :class: `RpcClient` .
-#     """
-#     def __init__(self, **kwargs):
-#         super(EventClient, self).__init__(**kwargs)
-#
-#     def call(self, app=None, action=None, params=None, timeout=3):
-#         """Make a request and send to mq.
-#
-#         Use params to create a request, request is a dict and can be serialized as json, like rpc client
-#         example {'app': 'cmdb', 'action': 'asset_add', 'params': {'id': 123, 'name': 'localhost', ...}
-#
-#         :param app: which app will be get this event, event server bind this
-#         :param action: It's a function will be call for remote app
-#         :param params: It's the params will be used by function
-#         :param timeout: None of business for event client
-#         """
-#         if app is None:
-#             logging.error('Param `app` should be a passed')
-#             return {'error': 'Param `app` should be a passed'}
-#
-#         if action is None:
-#             logging.error('Param `action` should be a passed')
-#             return {'error': 'Param `action` should be a passed'}
-#
-#         if params is None:
-#             params = {}
-#
-#         if not isinstance(params, dict):
-#             logging.error('Param `params` should be a dict')
-#             return {'error': 'Param `request` should be a dict'}
-#
-#         request = {
-#             'from': self.client_name,
-#             'to': app,
-#             'action': action,
-#             'params': params,
-#         }
-#         try:
-#             request = json.dumps(request)
-#         except TypeError:
-#             logging.error('`request` should be serialize failed')
-#             return {'error': '`request` should be serialize failed'}
-#
-#         logging.info('Send event to: %s call action: %s params: %s' % (app, action, params))
-#
-#         #: Publish request to MQ exchange, routing key is __rpc__ + app the server binding
-#         self.channel.basic_publish(exchange=self.sys_name,
-#                                    routing_key='__event__' + app,
-#                                    body=request)
-#         logging.info('Send event finished .')
-#         return {'msg': 'Send event finished'}
-#
-#
-# class EventServer(RpcServer):
-#     """Event server most like RpcServer, but difference more, I decide rewrite it.
-#
-#     """
-#     def __init__(self, **kwargs):
-#         super(EventServer, self).__init__(**kwargs)
-#
-#         self.queue = '__event__' + self.app
-#
-#     def _on_request(self, ch, method, props, body):
-#         """Event server needn't return any response, just process it and confirm get it.
-#         """
-#
-#         self._process_request(body)
-#         self.channel.basic_ack(delivery_tag=method.delivery_tag)
-#         logging.info('Finish process event: <%s>' % (body,))
-
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-
     app = Synapse('cmdb')
 
     @app.rpc_server.callback('asset_list', methods=['GET'])
@@ -427,19 +362,18 @@ if __name__ == '__main__':
                         },
                 'failed': False}
 
-    t = threading.Thread(target=app.run, args=())
+    t = threading.Thread(target=app.run, args=(1,))
     t.daemon = True
     t.start()
-    #
+
     # t2 = threading.Thread(target=event_server.serve, args=())
     # t2.daemon = True
     # t2.start()
     #
     print('*' * 100)
-    #
 
     threads = []
-    for i in range(1, 5):
+    for i in range(1, 2):
         t = threading.Thread(target=app.send_rpc, args=('cmdb', 'asset_list', {}))
         t.start()
         threads.append(t)
