@@ -18,11 +18,23 @@ import logging
 import threading
 import socket
 from multiprocessing import Process
+import uuid
 
 from kombu import Exchange, Queue, Connection, Consumer
 from kombu.mixins import ConsumerMixin
 from kombu.pools import producers
-from kombu.utils import uuid
+
+
+def create_logger(app):
+    handler = logging.StreamHandler()
+    log_fmt = '%(asctime)s [%(name)s %(levelname)s] %(message)s'
+    formatter = logging.Formatter(log_fmt)
+    handler.setFormatter(formatter)
+
+    logger = logging.getLogger(app.app_name)
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+    return logger
 
 
 class Synapse(object):
@@ -31,18 +43,22 @@ class Synapse(object):
         'MQ_PORT': 5672,
         'MQ_USER': None,
         'MQ_PASSWORD': None,
-        'DEBUG': False
+        'DEBUG': False,
+        'WORKER_PROCESSES': 4,
+        'WORKER_CONNECTIONS': 100,
     }
 
-    def __init__(self, app_name, app_id=None):
+    def __init__(self, app_name, app_id=None, sys_name='jumpserver'):
         self.app_name = app_name
-        self.app_id = app_id or uuid()
-        self.connection = self.make_connection()
-        self.rpc_server = RpcServer(self.connection, self.app_name, self.app_id)
-        self.rpc_client = RpcClient(self.connection, self.app_name, self.app_id)
+        self.app_id = app_id or uuid.uuid4().hex[-20:].upper()
+        self.sys_name = sys_name
+        self.connection = self.create_connection()
+        self.rpc_server = RpcServer(self.connection, self.app_name, self.app_id, sys_name=sys_name)
+        self.rpc_client = RpcClient(self.connection, self.app_name, self.app_id, sys_name=sys_name)
 
-    def send_rpc(self, *args, **kwargs):
-        self.rpc_client.send_rpc(*args, **kwargs)
+    @property
+    def send_rpc(self):
+        return self.rpc_client.send_rpc
 
     def send_event(self):
         pass
@@ -51,7 +67,7 @@ class Synapse(object):
     def rpc_callback(self):
         return self.rpc_server.callback
 
-    def make_connection(self):
+    def create_connection(self):
         if self.config.get('MQ_USER', None) is None:
             amqp_uri = 'amqp://%s:%s//' % (self.config.get('MQ_HOST', 'localhost'),
                                            self.config.get('MQ_PORT', 5672))
@@ -62,26 +78,32 @@ class Synapse(object):
                                                  self.config.get('MQ_PORT', 5672))
 
         self.connection = rv = Connection(amqp_uri, insist=True, ssl=False)
-        assert rv is not None, "Create connection will MQ server error"
+        if rv is None:
+            logging.error("Create connection will MQ server Error")
+            raise SystemError('Create connection will MQ server Error')
+
+        logging.info('System Name: %s' % self.sys_name)
+        logging.info('App Name: %s' % self.sys_name)
+        logging.info('App ID: %s' % self.app_id)
+        logging.info('Worker Processes: %s' % self.config.get('WORKER_PROCESSES'))
+        logging.info('Worker Max Connections: %s' % self.config.get('WORKER_CONNECTIONS'))
+        logging.info('Rabbit MQ Connection Created')
         return rv
 
-    def get_channel(self):
-        if isinstance(self.connection, Connection) and self.connection.connected:
-            return self.connection.channel()
+    def run(self, process_num=None):
+        if process_num is None:
+            process_num = self.config.get('WORKER_PROCESSES', None) or 1
 
-    def run(self, process_num=3):
-        self.make_connection()
         processes = []
         try:
             for j in range(process_num):
                 process = Process(target=self.rpc_server.run, args=())
                 process.start()
                 processes.append(process)
-                print('[%s] Awaiting RPC requests' % (j,))
+                print('Awaiting RPC requests [%s] ' % (j,))
 
             for p in processes:
                 p.join()
-
         finally:
             self.close()
 
@@ -95,22 +117,15 @@ class RpcServer(ConsumerMixin):
 
     :param connection: It will be used connection with MQ server
     :param app_name: It will be used as routing_key that client send to, It also identify this app.
-    :param: app_id: Every app have one unique id, It will be used identify this app
+    :param app_id: Every app have one unique id, It will be used identify this app
     :param sys_name: It's will be use a exchange name of MQ  default JMS
 
     """
 
-    def __new__(cls, *args, **kwargs):
-        if not hasattr(cls, '_instance'):
-            orig = super(RpcServer, cls)
-            cls._instance = orig.__new__(cls, *args, **kwargs)
-        return cls._instance
-
-    def __init__(self, connection, app_name, app_id=None, sys_name='JMS'):
-        #: Use __rpc__ and app to tag rpc queue, __event__ and app for event queue
+    def __init__(self, connection, app_name, app_id=None, sys_name='jumpserver'):
         self.connection = connection
         self.app_name = app_name
-        self.app_id = app_id or uuid()
+        self.app_id = app_id or uuid.uuid4().hex[-20:].upper()
         self.sys_name = sys_name
 
         self.queue_name = '%s_rpc_srv_%s' % (self.sys_name, self.app_name)
@@ -133,14 +148,14 @@ class RpcServer(ConsumerMixin):
         self.exchange.declare()
         self.queue.maybe_bind(channel)
         self.queue.declare()
-        print("Declare exchange and queue ...")
+        logging.info("Declare Exchange: %s " % (self.exchange.name,))
+        logging.info("Declare Queue: %s " % (self.queue_name,))
+        logging.info('Binding Queue: %s -> Exchange %s, Key: %s' % (self.binding_key,
+                                                                    self.exchange.name,
+                                                                    self.binding_key))
 
     def response(self, result, message):
         props = message.properties
-        print('start response')
-        print(props.get('reply_to'))
-        print(props.get('correlation_id'))
-        print(result)
         with producers[self.connection].acquire(block=True) as producer:
             producer.publish(result,
                              serializer='json',
@@ -148,15 +163,13 @@ class RpcServer(ConsumerMixin):
                              exchange=self.exchange,
                              routing_key=props.get('reply_to'),
                              correlation_id=props.get('correlation_id'))
-        print('end response')
 
     def on_message(self, body, message):
-        logging.info('Start process message: %s' % (body,))
-        result = self._process_request(body)
+        result = self._process_request(body, message)
         self.response(result, message)
         message.ack()
 
-    def get_consumers(self, Consumer, channel):
+    def get_consumers(self, _, channel):
         return [
             Consumer([self.queue], callbacks=[self.on_message], accept=['json'], no_ack=False),
         ]
@@ -173,34 +186,31 @@ class RpcServer(ConsumerMixin):
 
         super(RpcServer, self).run(_tokens)
 
-    def _process_request(self, body):
+    def _process_request(self, body, message):
         try:
             request = json.loads(body)
         except TypeError:
-            logging.error('Request <%s> unserialized failed' % (body,))
-            response = {'error': 'Request <%s> unserialized failed', 'failed': True}
+            logging.error('Request <%s> deserialized failed' % (body,))
+            response = {'error': 'Request <%s> deserialized failed', 'failed': True}
         else:
-            func = request.get('func', None)
-            method = request.get('method', 'GET')
-            func_full_name = '%s.%s' % (func, method.lower())
-            args = request.get('args', ())
-            kwargs = request.get('kwargs', {})
-            if func_full_name not in self.callback_map:
-                logging.error('Request action %s was not register by server.' % (func,))
-                response = {'error': 'Request action <%s> was not register by server.' % func,
+            action = request.get('action', ())
+            params = request.get('params', {})
+            if action not in self.callback_map:
+                logging.error('Request Action %s was not Register by RPC server.' % (action,))
+                response = {'error': 'Request action <%s> was not register by server.' % (action,),
                             'failed': True}
             else:
                 try:
-                    response = self.callback_map.get(func_full_name, None)(*args, **kwargs)
+                    response = self.callback_map.get(action, lambda x, y: x, y)(params, message)
                 except TypeError as e:
-                    logging.error('Call function failed: %s' % (e,))
+                    logging.error('Call action %s failed: %s' % (action, e,))
                     response = {'error': 'Call function failed: %s' % (e,), 'failed': True}
 
             try:
                 response = json.dumps(response)
             except TypeError:
-                logging.error('Function <%s> return cannot be serialize as json' % (func,))
-                response = {'error': 'Function <%s> return cannot be serialize as json' % (func,),
+                logging.error('Function <%s> return cannot be serialize as json' % (action,))
+                response = {'error': 'Function <%s> return cannot be serialize as json' % (action,),
                             'failed': True}
         return response
 
