@@ -7,7 +7,8 @@ from .rpc_client import RpcClient
 class Synapse(EventServer, EventClient, RpcServer, RpcClient):
     def __init__(self, app_name='', app_id='', sys_name='', mq_host='', mq_port='', mq_user='',
                  mq_pass='', debug=False,
-                 disable_rpc_client=False, disable_event_client=False, event_callback_map={}, rpc_callback_map={}):
+                 disable_rpc_client=False, disable_event_client=False, event_callback_map={},
+                 rpc_callback_map={}):
         self.app_name = app_name
         self.sys_name = sys_name
         self.mq_host = mq_host
@@ -18,8 +19,8 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
         self.debug = debug
         self.disable_rpc_client = disable_rpc_client
         self.disable_event_client = disable_event_client
-        self.event_callback_map = event_callback_map if event_callback_map else False
-        self.event_callback_map = rpc_callback_map if rpc_callback_map else False
+        self.event_callback_map = event_callback_map
+        self.event_callback_map = rpc_callback_map
 
     def __del__(self):
         self.conn.release()

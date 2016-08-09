@@ -1,5 +1,5 @@
 from .base import Base
-from kombu import Producer, Queue, Consumer
+from kombu import Queue, Consumer
 import uuid
 
 
@@ -17,6 +17,8 @@ class RpcClient(Base):
         self.log("[Synapse Info] Rpc Client Handler Listening")
 
     def rpc_client_callback(self, body, message):
+        if self.debug:
+            self.log("[Synapse Debug] Receive Rpc Callback: %s" % body)
         self.rpc_cli_results[message.properties["correlation_id"]] = body["params"]
 
     def send_rpc(self, app_name, action, params):
@@ -31,11 +33,13 @@ class RpcClient(Base):
                 "params": params
             }
             properties = {"correlation_id": corr_id, "reply_to": "rpc.cli." + self.app_name + "." + self.app_id}
-            producer = Producer(self.conn, self.mqex, "rpc.srv." + app_name)
-            producer.publish(data, **properties)
+            self.conn.Producer().publish(body=data, routing_key="rpc.srv.%s" % app_name, exchange=self.mqex,
+                                         **properties)
             if self.debug:
-                self.log("Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
-            while corr_id in self.rpc_cli_results.keys():
-                ret = self.rpc_cli_results[corr_id]
-                del self.rpc_cli_results[corr_id]
-                return ret
+                self.log("[Synapse Debug] Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
+            while True:
+                if corr_id in self.rpc_cli_results.keys():
+                    ret = self.rpc_cli_results[corr_id]
+                    del self.rpc_cli_results[corr_id]
+                    break
+            return ret

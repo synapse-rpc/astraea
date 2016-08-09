@@ -1,5 +1,4 @@
 from .base import Base
-from kombu import Producer
 import uuid
 
 
@@ -14,10 +13,8 @@ class EventClient(Base):
                 "action": action,
                 "params": params
             }
-            if self.debug:
-                self.log("[Synapse Debug] Publish Event: %s.%s %s" % (self.app_name, action, data))
-            properties = {"correlation_id": str(uuid.uuid4())}
-            producer = Producer(self.conn, self.mqex, "event." + self.app_name + "." + action)
-            producer.publish(data, **properties)
+            event_info = {"correlation_id": str(uuid.uuid4())}
+            self.conn.Producer().publish(body=data, routing_key="event.%s.%s" % (self.app_name, action),
+                                         exchange=self.mqex, **event_info)
             if self.debug:
                 self.log("[Synapse Debug] Publish Event: %s.%s %s" % (self.app_name, action, data))
