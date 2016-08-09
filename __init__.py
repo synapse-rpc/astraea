@@ -46,11 +46,15 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
         else:
             self.is_server = True
             self.event_server_serve()
+            for k in self.event_callback_map:
+                self.log("[Synapse Info] *ENT: %s -> %s" % (k, self.event_callback_map[k].__name__))
         if self.rpc_callback_map == {}:
             self.log("[Synapse Warn] Rpc Handler Server Disabled: rpc_callback_map not set")
         else:
             self.is_server = True
             self.rpc_server_serve()
+            for k in self.rpc_callback_map:
+                self.log("[Synapse Info] *RPC: %s -> %s" % (k, self.rpc_callback_map[k].__name__))
         if self.disable_event_client:
             self.log("[Synapse Warn] Event Sender Disabled: disable_event_client set True")
         else:

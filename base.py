@@ -1,4 +1,4 @@
-import time
+import time, sys
 from kombu import Connection, Exchange
 from random import Random
 
@@ -23,7 +23,10 @@ class Base:
     is_server = False
 
     def log(self, msg):
-        print(time.strftime("%Y/%m/%d %H:%M:%S"), msg)
+        if sys.version > '3':
+            print(time.strftime("%Y/%m/%d %H:%M:%S"), msg)
+        else:
+            print time.strftime("%Y/%m/%d %H:%M:%S"), msg
 
     def create_connection(self):
         if self.mq_user is None:
