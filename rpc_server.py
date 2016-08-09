@@ -1,5 +1,6 @@
 from .base import Base
 from kombu import Queue, Consumer, Producer
+import threading
 
 
 class RpcServer(Base):
@@ -8,6 +9,10 @@ class RpcServer(Base):
                      routing_key="rpc.srv." + self.app_name, auto_delete=True)
 
     def rpc_server_callback(self, body, message):
+        t = threading.Thread(target=self.rpc_server_callback_handler, args=(body, message))
+        t.start()
+
+    def rpc_server_callback_handler(self, body, message):
         if self.debug:
             self.log("[Synapse Debug] Receive Rpc Request: %s" % body)
         if body['action'] in self.rpc_callback_map.keys():
@@ -23,9 +28,10 @@ class RpcServer(Base):
             "action": "reply-%s" % body['action'],
             "params": result
         }
+
         properties = {'correlation_id': message.properties["correlation_id"]}
-        producer = Producer(self.conn, self.mqex, message.properties["reply_to"])
-        producer.publish(response, **properties)
+        self.conn.Producer().publish(body=response, routing_key=message.properties["reply_to"],
+                                     exchange=self.mqex, **properties)
         if self.debug:
             self.log("[Synapse Debug] Reply Rpc Request: %r" % response)
         message.ack()

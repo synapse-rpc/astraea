@@ -26,12 +26,23 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
         self.conn.release()
 
     def serve(self):
+        self.serve_handler()
+        while self.is_server:
+            try:
+                self.conn.drain_events()
+            except:
+                self.log("[Synapse Error] System Connection Lost, Reconnect... ")
+                self.conn.release()
+                self.serve_handler()
+
+    def serve_handler(self):
         if self.app_name == "" or self.sys_name == "":
             self.log("[Synapse Error] Must Set app_name and sys_name , system exit .")
             exit(1)
         else:
             self.log("[Synapse Info] System Name: %s" % self.sys_name)
             self.log("[Synapse Info] System App Name: %s" % self.app_name)
+            self.log("[Synapse Info] App MaxProcessNum: %d" % self.proccess_num)
         if self.debug:
             self.log("[Synapse Warn] System Run Mode: Debug")
         else:
@@ -64,5 +75,5 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
         else:
             self.is_server = True
             self.rpc_client_serve()
-        while self.is_server:
-            self.conn.drain_events()
+        if self.is_server:
+            self.conn.ensure_connection(self.reconnect)

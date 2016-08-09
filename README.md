@@ -4,8 +4,8 @@
 需要先安装依赖包 kombu:
 > pip install kombu
 
-可以使用 Submodule的方式引用
-> git submodule add -b python http://code.simcu.com/offical/synapse.git synapse
+git:
+> git clone -b python http://code.simcu.com/offical/synapse.git synapse
 
 初始化方法:
 
@@ -22,17 +22,17 @@ server.rpc_callback_map = {
     "pyt.get": pyt,
 }
 #设置系统名称(相同的系统中的APP才能相互调用)
-server.sys_name = "jumpserver"
+server.sys_name = ""
 #设置应用名称(RPC调用和事件的标识)
-server.app_name = "pytest"
+server.app_name = ""
 #RabbitMQ 服务器地址
-server.mq_host = "cn.simcu.com"
+server.mq_host = ""
 #RabbitMQ 服务器端口
 server.mq_port = 5672
 #RabbitMQ 服务器用户
-server.mq_user = "jms"
+server.mq_user = ""
 #RabbitMQ 服务器密码
-server.mq_pass = "jump@1314!"
+server.mq_pass =""
 #调试模式开关 (打开后可以看到很多LOG)
 server.debug = True
 #是否禁用RPC客户端功能 (默认可以进行RPC请求)

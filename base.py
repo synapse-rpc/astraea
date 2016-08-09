@@ -1,4 +1,5 @@
-import time, sys
+from __future__ import print_function
+import time
 from kombu import Connection, Exchange
 from random import Random
 
@@ -23,10 +24,7 @@ class Base:
     is_server = False
 
     def log(self, msg):
-        if sys.version > '3':
-            print(time.strftime("%Y/%m/%d %H:%M:%S"), msg)
-        else:
-            print time.strftime("%Y/%m/%d %H:%M:%S"), msg
+        print(time.strftime("%Y/%m/%d %H:%M:%S"), msg)
 
     def create_connection(self):
         if self.mq_user is None:
@@ -34,6 +32,7 @@ class Base:
         else:
             amqp_uri = 'amqp://%s:%s@%s:%s//' % (self.mq_user, self.mq_pass, self.mq_host, self.mq_port)
         self.conn = Connection(amqp_uri, insist=True, ssl=False)
+        self.conn.connect()
 
     def check_exchange(self):
         self.mqex = Exchange(self.sys_name, 'topic', durable=True)
@@ -46,3 +45,8 @@ class Base:
         for i in range(str_len):
             str += chars[random.randint(0, length)]
         return str
+
+    def reconnect(self):
+        print(2312312)
+        self.conn.release()
+        self.serve()

@@ -29,7 +29,7 @@ class RpcClient(Base):
             corr_id = str(uuid.uuid4())
             data = {
                 "from": self.app_name + "." + self.app_id,
-                "to": "event",
+                "to": app_name,
                 "action": action,
                 "params": params
             }
@@ -37,7 +37,7 @@ class RpcClient(Base):
             self.conn.Producer().publish(body=data, routing_key="rpc.srv.%s" % app_name, exchange=self.mqex,
                                          **properties)
             if self.debug:
-                self.log("[Synapse Debug] Send A RPC REQUEST: %s %s %s" % (app_name, action, params))
+                self.log("[Synapse Debug] Send A RPC REQUEST: %s" % data)
             while True:
                 if corr_id in self.rpc_cli_results.keys():
                     ret = self.rpc_cli_results[corr_id]

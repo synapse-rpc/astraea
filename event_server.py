@@ -1,5 +1,6 @@
 from .base import Base
 from kombu import Queue, Consumer
+import threading
 
 
 class EventServer(Base):
@@ -11,6 +12,10 @@ class EventServer(Base):
         return queues
 
     def event_server_callback(self, body, message):
+        t = threading.Thread(target=self.event_server_callback_handler, args=(body, message))
+        t.start()
+
+    def event_server_callback_handler(self, body, message):
         if self.debug:
             self.log("[Synapse Debug] Receive Event: %s %s" % (message.delivery_info['routing_key'][6:], body))
         if self.event_callback_map[message.delivery_info['routing_key'][6:]](body['params'], message):
