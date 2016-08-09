@@ -1,17 +1,17 @@
 ## 西纳普斯 - synapse (Python Version)
 
 ### 此为系统核心交互组件,包含了事件和RPC系统
-需要先安装依赖包 pika:
-> pip install pika
+需要先安装依赖包 kombu:
+> pip install kombu
 
 可以使用 Submodule的方式引用
-> git submodule add -b python http://code.simcu.com/jumpserver/synapse.git synapse
+> git submodule add -b python http://code.simcu.com/offical/synapse.git synapse
 
 初始化方法:
 
 ```python
 #创建一个新的对象(这里有疑问,是不是应该加括号)
-server = Synapse
+server = Synapse()
 #定义事件回调
 server.event_callback_map = {
     "icarus.test": callback,
