@@ -20,6 +20,7 @@ class RpcClient(Base):
         if self.debug:
             self.log("[Synapse Debug] Receive Rpc Callback: %s" % body)
         self.rpc_cli_results[message.properties["correlation_id"]] = body["params"]
+        message.ack()
 
     def send_rpc(self, app_name, action, params):
         if self.disable_event_client:
