@@ -1,9 +1,9 @@
-from .base import Base
+from .common import Common
 from kombu import Queue, Consumer
 import uuid
 
 
-class RpcClient(Base):
+class RpcClient(Common):
     def rpc_client_queue(self):
         return Queue(self.sys_name + "_rpc_cli_" + self.app_name + "_" + self.app_id, exchange=self.mqex,
                      routing_key="rpc.cli." + self.app_name + "." + self.app_id, auto_delete=True)

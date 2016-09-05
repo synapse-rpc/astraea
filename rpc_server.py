@@ -1,9 +1,9 @@
-from .base import Base
+from .common import Common
 from kombu import Queue, Consumer, Producer
 import threading
 
 
-class RpcServer(Base):
+class RpcServer(Common):
     def rpc_server_queue(self):
         return Queue(self.sys_name + "_rpc_srv_" + self.app_name, exchange=self.mqex,
                      routing_key="rpc.srv." + self.app_name, auto_delete=True)

@@ -1,8 +1,8 @@
-from .base import Base
+from .common import Common
 import uuid
 
 
-class EventClient(Base):
+class EventClient(Common):
     def send_event(self, action, params):
         if self.disable_event_client:
             self.log("[Synapse Error] Event Send Not Success: DisableEventClient set true")

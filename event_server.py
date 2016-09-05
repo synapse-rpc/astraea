@@ -1,9 +1,9 @@
-from .base import Base
+from .common import Common
 from kombu import Queue, Consumer
 import threading
 
 
-class EventServer(Base):
+class EventServer(Common):
     def event_server_queue(self):
         queues = []
         for k in self.event_callback_map.keys():

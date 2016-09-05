@@ -4,7 +4,7 @@ from kombu import Connection, Exchange
 from random import Random
 
 
-class Base:
+class Common:
     debug = False
     disable_rpc_client = False
     disable_event_client = False
