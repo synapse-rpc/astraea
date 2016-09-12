@@ -5,7 +5,7 @@
 > pip install kombu
 
 git:
-> git clone -b python http://code.simcu.com/offical/synapse.git synapse
+> git clone http://code.simcu.com/synapse/astraea.git synapse
 
 初始化方法:
 
