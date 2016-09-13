@@ -7,6 +7,9 @@
 git:
 > git clone http://code.simcu.com/synapse/astraea.git synapse
 
+或者使用PIP安装：
+> pip install astraea
+
 初始化方法:
 
 ```python
