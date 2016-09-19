@@ -13,6 +13,8 @@ git:
 初始化方法:
 
 ```python
+#使用pip安装
+from synapse import Synapse
 #创建一个新的对象(这里有疑问,是不是应该加括号)
 server = Synapse()
 #定义事件回调
