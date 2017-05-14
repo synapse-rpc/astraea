@@ -1,8 +1,6 @@
 ## 西纳普斯 - synapse (Python Version)
 
 ### 此为系统核心交互组件,包含了事件和RPC系统
-需要先安装依赖包 kombu:
-> pip install kombu
 
 git:
 > git clone https://github.com/synapse-rpc/astraea.git synapse
