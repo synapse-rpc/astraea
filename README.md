@@ -5,7 +5,7 @@
 > pip install kombu
 
 git:
-> git clone http://code.simcu.com/synapse/astraea.git synapse
+> git clone https://github.com/synapse-rpc/astraea.git synapse
 
 或者使用PIP安装：
 > pip install astraea
