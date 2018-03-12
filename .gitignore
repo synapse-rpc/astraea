@@ -3,3 +3,6 @@ __pycache__
 .idea
 *.py[cod]
 .DS_Store
+dist
+astraea.egg-info
+build
