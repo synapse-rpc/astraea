@@ -1,6 +1,8 @@
 ## 西纳普斯 - synapse (Python Version)
 
 ### 此为系统核心交互组件,包含了事件和RPC系统
+包地址
+> https://pypi.python.org/pypi/astraea
 
 git:
 > git clone https://github.com/synapse-rpc/astraea.git synapse
