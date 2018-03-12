@@ -1,32 +1,31 @@
-from .common import Common
+from .synapse import Synapse
 from kombu import Queue, Consumer
 import threading
 
 
-class EventServer(Common):
-    def event_server_queue(self):
-        queues = []
-        for k in self.event_callback_map.keys():
-            queues.append(
-                Queue(self.sys_name + "_event_" + self.app_name, exchange=self.mqex, routing_key="event." + k))
-        return queues
+class EventServer(Synapse):
+    def event_server_queue(self, channel):
+        queue = Queue("%s_%s_event" % (self.sys_name, self.app_name), channel=channel, durable=True, auto_delete=True)
+        queue.declare()
+        for k in self.event_callback.keys():
+            queue.bind_to(exchange=self.sys_name, routing_key="event.%s" % k)
+        return [queue]
 
     def event_server_callback(self, body, message):
-        t = threading.Thread(target=self.event_server_callback_handler, args=(body, message))
-        t.start()
+        threading.Thread(target=self.event_server_callback_handler, args=(body, message)).start()
 
     def event_server_callback_handler(self, body, message):
         if self.debug:
-            self.log("[Synapse Debug] Receive Event: %s %s" % (message.delivery_info['routing_key'][6:], body))
-        if self.event_callback_map[message.delivery_info['routing_key'][6:]](body['params'], message):
+            self.log(
+                "Event Receive: %s@%s %s" % (message.properties['type'], message.properties['reply_to'], body),
+                self.LogDebug)
+        if self.event_callback[message.delivery_info['routing_key'][6:]](body, message):
             message.ack()
         else:
             message.reject(requeue=True)
 
     def event_server_serve(self):
-        consumer = Consumer(self.conn, self.event_server_queue(),
-                            tag_prefix="%s.%s.event.%s" % (self.sys_name, self.app_name, self.app_id))
+        channel = self.create_channel(self.event_process_num, "EventServer")
+        consumer = Consumer(channel, self.event_server_queue(channel))
         consumer.register_callback(self.event_server_callback)
-        consumer.qos(prefetch_count=self.proccess_num, prefetch_size=0, apply_global=False)
         consumer.consume()
-        self.log('[Synapse Info] Event Server Handler Listening')

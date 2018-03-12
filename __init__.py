@@ -19,8 +19,8 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
         self.debug = debug
         self.disable_rpc_client = disable_rpc_client
         self.disable_event_client = disable_event_client
-        self.event_callback_map = event_callback_map
-        self.event_callback_map = rpc_callback_map
+        self.event_callback = event_callback_map
+        self.event_callback = rpc_callback_map
 
     def __del__(self):
         self.conn.release()
@@ -31,47 +31,46 @@ class Synapse(EventServer, EventClient, RpcServer, RpcClient):
             try:
                 self.conn.drain_events()
             except:
-                self.log("[Synapse Error] System Connection Lost, Reconnect... ")
+                self.log("System Connection Lost, Reconnect... ", self.LogError)
                 self.conn.release()
                 self.serve_handler()
 
     def serve_handler(self):
         if self.app_name == "" or self.sys_name == "":
-            self.log("[Synapse Error] Must Set app_name and sys_name , system exit .")
+            self.log("Must Set app_name and sys_name , system exit .", self.LogError)
             exit(1)
         else:
-            self.log("[Synapse Info] System Name: %s" % self.sys_name)
-            self.log("[Synapse Info] System App Name: %s" % self.app_name)
-            self.log("[Synapse Info] App MaxProcessNum: %d" % self.proccess_num)
-        if self.debug:
-            self.log("[Synapse Warn] System Run Mode: Debug")
-        else:
-            self.log("[Synapse Info] System Run Mode: Production")
+            self.log("System Name: %s" % self.sys_name)
+            self.log("App Name: %s" % self.app_name)
         if self.app_id == "":
             self.app_id = self.random_str()
-            self.log("[Synapse Info] System App Id: %s" % self.app_id)
+            self.log("App Id: %s" % self.app_id)
+        if self.debug:
+            self.log("App Run Mode: Debug", self.LogWarn)
+        else:
+            self.log("App Run Mode: Production")
         self.create_connection()
-        self.check_exchange()
-        if self.event_callback_map == {}:
-            self.log("[Synapse Warn] Event Server Handler Disabled: event_callback_map not set")
+        self.check_and_create_exchange()
+        if self.event_callback == {}:
+            self.log("Event Server Disabled: event_callback not set", self.LogWarn)
         else:
             self.is_server = True
             self.event_server_serve()
-            for k in self.event_callback_map:
-                self.log("[Synapse Info] *ENT: %s -> %s" % (k, self.event_callback_map[k].__name__))
-        if self.rpc_callback_map == {}:
-            self.log("[Synapse Warn] Rpc Handler Server Disabled: rpc_callback_map not set")
+            for k in self.event_callback:
+                self.log("*EVT: %s -> %s" % (k, self.event_callback[k].__name__))
+        if self.rpc_callback == {}:
+            self.log("Rpc Server Disabled: rpc_callback not set", self.LogWarn)
         else:
             self.is_server = True
             self.rpc_server_serve()
-            for k in self.rpc_callback_map:
-                self.log("[Synapse Info] *RPC: %s -> %s" % (k, self.rpc_callback_map[k].__name__))
+            for k in self.rpc_callback:
+                self.log("*RPC: %s -> %s" % (k, self.rpc_callback[k].__name__))
         if self.disable_event_client:
-            self.log("[Synapse Warn] Event Sender Disabled: disable_event_client set True")
+            self.log("Event Client Disabled: disable_event_client set True", self.LogWarn)
         else:
-            self.log("[Synapse Info] Event Sender Ready")
+            self.event_client_serve()
         if self.disable_rpc_client:
-            self.log("[Synapse Warn] Rpc Sender Disabled: disable_rpc_client set True")
+            self.log("Rpc Client Disabled: disable_rpc_client set True", self.LogWarn)
         else:
             self.is_server = True
             self.rpc_client_serve()

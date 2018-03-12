@@ -1,20 +1,21 @@
-from .common import Common
-import uuid
+from .synapse import Synapse
 
 
-class EventClient(Common):
+class EventClient(Synapse):
+    event_client_channel = None
+
+    def event_client_serve(self):
+        self.event_client_channel = self.create_channel(0, "EventClient")
+        self.log("Event Client Ready")
+
     def send_event(self, action, params):
         if self.disable_event_client:
-            self.log("[Synapse Error] Event Send Not Success: DisableEventClient set true")
+            self.log("Event Client Disabled: DisableEventClient set true", self.LogError)
         else:
-            data = {
-                "from": self.app_name + "." + self.app_id,
-                "to": "event",
-                "action": action,
-                "params": params
-            }
-            event_info = {"correlation_id": str(uuid.uuid4())}
-            self.conn.Producer().publish(body=data, routing_key="event.%s.%s" % (self.app_name, action),
-                                         exchange=self.mqex, **event_info)
+            event_info = {"app_id": self.app_id, "message_id": self.random_str(), "reply_to": self.app_name,
+                          "type": action}
+            self.event_client_channel.Producer().publish(body=params,
+                                                         routing_key="event.%s.%s" % (self.app_name, action),
+                                                         exchange=self.sys_name, **event_info)
             if self.debug:
-                self.log("[Synapse Debug] Publish Event: %s.%s %s" % (self.app_name, action, data))
+                self.log("Event Publish: %s@%s %s" % (action, self.app_name, params), self.LogDebug)
