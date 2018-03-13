@@ -1,4 +1,5 @@
 from .synapse import Synapse
+import json
 
 
 class EventClient(Synapse):
@@ -14,7 +15,7 @@ class EventClient(Synapse):
         else:
             event_info = {"app_id": self.app_id, "message_id": self.random_str(), "reply_to": self.app_name,
                           "type": action}
-            self.event_client_channel.Producer().publish(body=params,
+            self.event_client_channel.Producer().publish(body=json.dumps(params),
                                                          routing_key="event.%s.%s" % (self.app_name, action),
                                                          exchange=self.sys_name, **event_info)
             if self.debug:

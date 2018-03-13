@@ -1,6 +1,7 @@
 from .synapse import Synapse
 from kombu import Queue, Consumer
 import threading
+import json
 
 
 class RpcServer(Synapse):
@@ -20,12 +21,12 @@ class RpcServer(Synapse):
                 self.app_name,
                 body), self.LogDebug)
         if message.properties["type"] in self.rpc_callback.keys():
-            result = self.rpc_callback[message.properties["type"]](body, message)
+            result = self.rpc_callback[message.properties["type"]](json.loads(body), message)
         else:
             result = {"rpc_error": "method not found"}
         props = {"app_id": self.app_id, "message_id": self.random_str(), "reply_to": self.app_name,
                  "type": message.properties["type"], "correlation_id": message.properties["message_id"]}
-        self.conn.Producer().publish(body=result, routing_key="client.%s.%s" % (
+        self.conn.Producer().publish(body=json.dumps(result), routing_key="client.%s.%s" % (
             message.properties["reply_to"], message.properties["app_id"]),
                                      exchange=self.mqex, **props)
         if self.debug:

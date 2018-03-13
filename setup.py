@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='astraea',
-    version='1.4.1',
+    version='1.4.2',
     description=(
         'A rpc framework base RabbitMQ (已实现C#,python,Golang)'
     ),

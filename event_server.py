@@ -1,6 +1,7 @@
 from .synapse import Synapse
 from kombu import Queue, Consumer
 import threading
+import json
 
 
 class EventServer(Synapse):
@@ -19,7 +20,7 @@ class EventServer(Synapse):
             self.log(
                 "Event Receive: %s@%s %s" % (message.properties['type'], message.properties['reply_to'], body),
                 self.LogDebug)
-        if self.event_callback[message.delivery_info['routing_key'][6:]](body, message):
+        if self.event_callback[message.delivery_info['routing_key'][6:]](json.loads(body), message):
             message.ack()
         else:
             message.reject(requeue=True)
