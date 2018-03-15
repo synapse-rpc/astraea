@@ -1,32 +1,32 @@
-from .synapse import Synapse
-from kombu import Queue, Consumer
-import threading
 import json
 
 
-class EventServer(Synapse):
-    def event_server_queue(self, channel):
-        queue = Queue("%s_%s_event" % (self.sys_name, self.app_name), channel=channel, durable=True, auto_delete=True)
-        queue.declare()
-        for k in self.event_callback.keys():
-            queue.bind_to(exchange=self.sys_name, routing_key="event.%s" % k)
-        return [queue]
+class EventServer:
+    def __init__(self, synapse):
+        self.s = synapse
+        self.ch = synapse.create_channel(synapse.event_process_num, "EventServer")
+        self.queue_name = "%s_%s_event" % (self.s.sys_name, self.s.app_name)
 
-    def event_server_callback(self, body, message):
-        threading.Thread(target=self.event_server_callback_handler, args=(body, message)).start()
+    def check_and_create_queue(self):
+        self.ch.queue_declare(queue=self.queue_name, durable=True, auto_delete=True)
+        for k in self.s.event_callback.keys():
+            self.ch.queue_bind(queue=self.queue_name, exchange=self.s.sys_name, routing_key="event.%s" % k)
 
-    def event_server_callback_handler(self, body, message):
-        if self.debug:
-            self.log(
-                "Event Receive: %s@%s %s" % (message.properties['type'], message.properties['reply_to'], body),
-                self.LogDebug)
-        if self.event_callback[message.delivery_info['routing_key'][6:]](json.loads(body), message):
-            message.ack()
-        else:
-            message.reject(requeue=True)
+    def run(self):
+        self.check_and_create_queue()
 
-    def event_server_serve(self):
-        channel = self.create_channel(self.event_process_num, "EventServer")
-        consumer = Consumer(channel, self.event_server_queue(channel))
-        consumer.register_callback(self.event_server_callback)
-        consumer.consume()
+        def handler(ch, deliver, props, body):
+            if self.s.debug:
+                self.s.log("Event Receive: %s@%s %s" % (props.type, props.reply_to, str(body)))
+            key = "%s.%s" % (props.reply_to, props.type)
+            if key in self.s.event_callback:
+                res = self.s.event_callback[key](json.loads(body), props)
+                if res:
+                    ch.basic_ack(deliver.delivery_tag)
+                else:
+                    ch.basic_nack(deliver.delivery_tag)
+            else:
+                ch.basic_nack(deliver.delivery_tag, requeue=False)
+
+        self.ch.basic_consume(consumer_callback=handler, queue=self.queue_name)
+        self.ch.start_consuming()

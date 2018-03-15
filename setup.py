@@ -4,10 +4,10 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='astraea',
+    name='rpc.synpase.astraea',
     version='1.4.2',
     description=(
-        'A rpc framework base RabbitMQ (已实现C#,python,Golang)'
+        'A rpc framework base RabbitMQ'
     ),
     long_description=open('README.md').read(),
     author='xRain',

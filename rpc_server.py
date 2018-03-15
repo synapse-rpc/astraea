@@ -1,42 +1,42 @@
-from .synapse import Synapse
-from kombu import Queue, Consumer
-import threading
 import json
+import pika
 
 
-class RpcServer(Synapse):
-    def rpc_server_queue(self, channel):
-        queue = Queue("%s_%s_server" % (self.sys_name, self.app_name), exchange=self.mqex,
-                      routing_key="server.%s" % self.app_name, durable=True, channel=channel, auto_delete=True)
-        queue.declare()
-        return [queue]
+class RpcServer:
+    def __init__(self, synapse):
+        self.s = synapse
+        self.ch = synapse.create_channel(synapse.rpc_process_num, "RpcServer")
+        self.queue_name = "%s_%s_server" % (self.s.sys_name, self.s.app_name)
+        self.router = "server.%s" % self.s.app_name
 
-    def rpc_server_callback(self, body, message):
-        threading.Thread(target=self.rpc_server_callback_handler, args=(body, message)).start()
+    def check_and_create_queue(self):
+        self.ch.queue_declare(queue=self.queue_name, durable=True, auto_delete=True)
+        self.ch.queue_bind(queue=self.queue_name, exchange=self.s.sys_name, routing_key=self.router)
 
-    def rpc_server_callback_handler(self, body, message):
-        if self.debug:
-            self.log("RPC Receive: (%s)%s->%s@%s %s" % (
-                message.properties['message_id'], message.properties["reply_to"], message.properties["type"],
-                self.app_name,
-                body), self.LogDebug)
-        if message.properties["type"] in self.rpc_callback.keys():
-            result = self.rpc_callback[message.properties["type"]](json.loads(body), message)
-        else:
-            result = {"rpc_error": "method not found"}
-        props = {"app_id": self.app_id, "message_id": self.random_str(), "reply_to": self.app_name,
-                 "type": message.properties["type"], "correlation_id": message.properties["message_id"]}
-        self.conn.Producer().publish(body=json.dumps(result), routing_key="client.%s.%s" % (
-            message.properties["reply_to"], message.properties["app_id"]),
-                                     exchange=self.mqex, **props)
-        if self.debug:
-            self.log("Rpc Return: (%s)%s@%s->%s %s" % (
-                message.properties["message_id"], message.properties["type"], self.app_name,
-                message.properties["reply_to"], result), self.LogDebug)
-        message.ack()
+    def run(self):
+        self.check_and_create_queue()
 
-    def rpc_server_serve(self):
-        channel = self.create_channel(self.rpc_process_num, "RpcServer")
-        consumer = Consumer(self.conn, self.rpc_server_queue(channel))
-        consumer.register_callback(self.rpc_server_callback)
-        consumer.consume()
+        def handler(ch, deliver, props, body):
+            if self.s.debug:
+                self.s.log("Rpc Receive: (%s)%s->%s@%s %s" % (
+                    props.message_id, props.reply_to, props.type, self.s.app_name, str(body)), self.s.LogDebug)
+            if props.type in self.s.rpc_callback:
+                res = self.s.rpc_callback[props.type](json.loads(body), props)
+            else:
+                res = {"rpc_error": "method not found"}
+            body = json.dumps(res)
+            reply = "client.%s.%s" % (props.reply_to, props.app_id)
+            ret_props = pika.BasicProperties(
+                app_id=self.s.app_id,
+                correlation_id=self.s.correlation_id,
+                message_id=self.s.random_string(),
+                reply_to=self.s.app_name,
+                type=props.type
+            )
+            ch.basic_publish(exchange=self.s.sys_name, routing_key=reply, properties=ret_props, body=body)
+            if self.s.debug:
+                self.s.log("Rpc Return: (%s)%s@%s->%s %s" % (
+                    props.message_id, props.type, self.s.app_name, props.reply_to, body), self.s.LogDebug)
+
+        self.ch.basic_consume(consumer_callback=handler, queue=self.queue_name, no_ack=True)
+        self.ch.start_consuming()
