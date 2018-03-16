@@ -17,18 +17,17 @@ class EventServer:
         self._check_and_create_queue()
 
         def handler(ch, deliver, props, body):
-            if deliver != None:
-                if self._synapse.debug:
-                    self._synapse.log("Event Receive: %s@%s %s" % (props.type, props.reply_to, str(body)))
-                key = "%s.%s" % (props.reply_to, props.type)
-                if key in self._synapse.event_callback:
-                    res = self._synapse.event_callback[key](json.loads(body), props)
-                    if res:
-                        self._channel.basic_ack(deliver.delivery_tag)
-                    else:
-                        self._channel.basic_nack(deliver.delivery_tag)
+            if self._synapse.debug:
+                self._synapse.log("Event Receive: %s@%s %s" % (props.type, props.reply_to, str(body)),self._synapse.LogDebug)
+            key = "%s.%s" % (props.reply_to, props.type)
+            if key in self._synapse.event_callback:
+                res = self._synapse.event_callback[key](json.loads(body), props)
+                if res:
+                    self._channel.basic_ack(deliver.delivery_tag)
                 else:
-                    self._channel.basic_nack(deliver.delivery_tag, requeue=False)
+                    self._channel.basic_nack(deliver.delivery_tag)
+            else:
+                self._channel.basic_nack(deliver.delivery_tag, requeue=False)
 
         self._channel.basic_consume(consumer_callback=handler, queue=self._queue_name)
         self._channel.start_consuming()

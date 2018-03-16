@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='rpc.synpase.astraea',
-    version='1.4.3',
+    version='1.4.4',
     description=(
         'A rpc framework base RabbitMQ'
     ),

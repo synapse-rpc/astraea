@@ -41,8 +41,9 @@ class RpcClient:
         body = json.dumps(params)
         self._channel.basic_publish(exchange=self._synapse.sys_name, routing_key=router, properties=props, body=body)
         if self._synapse.debug:
-            self._synapse.log("Rpc Request: %s->%s@%s %s" % (self._synapse.app_name, method, app, body),
-                              self._synapse.LogDebug)
+            self._synapse.log(
+                "Rpc Request: (%s)%s->%s@%s %s" % (props.message_id, self._synapse.app_name, method, app, body),
+                self._synapse.LogDebug)
         ts = int(time.time())
         while True:
             if int(time.time()) - ts > self._synapse.rpc_timeout:
