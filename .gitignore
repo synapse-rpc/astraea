@@ -4,6 +4,6 @@ __pycache__
 *.py[cod]
 .DS_Store
 dist
-astraea.egg-info
 build
 run.py
+*.egg-info

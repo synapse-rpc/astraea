@@ -2,13 +2,13 @@
 
 ### 此为系统核心交互组件,包含了事件和RPC系统
 包地址
-> https://pypi.python.org/pypi/astraea
+> https://pypi.python.org/pypi/rpc.synpase.astraea
 
 git:
-> git clone https://github.com/synapse-rpc/astraea.git synapse
+> git clone https://github.com/synapse-rpc/astraea.git
 
 或者使用PIP安装：
-> pip install astraea
+> pip install rpc.synpase.astraea
 
 初始化方法:
 
@@ -18,12 +18,12 @@ from synapse import Synapse
 #创建一个新的对象(这里有疑问,是不是应该加括号)
 server = Synapse()
 #定义事件回调
-server.event_callback_map = {
+server.event_callback = {
     "icarus.test": callback,
     "pytest.test": callback
 }
 #定义RPC服务方法
-server.rpc_callback_map = {
+server.rpc_callback = {
     "pyt.get": pyt,
 }
 #设置系统名称(相同的系统中的APP才能相互调用)
@@ -49,16 +49,16 @@ server.serve()
 ```
 事件处理方法类型:
 ```python
-callback(params, raw) 
+callback(params, props) 
 #params 为字典,客户端请求数据
-#raw 为RPC传输的数据包,一般情况不使用
+#props 为AMQP Properties
 #需要返回 True表示处理完成,返回False表示处理失败
 ```
 RPC服务方法类型:
 ```python
-pyt(params, raw) 
+pyt(params, props) 
 #params 为字典,客户端请求数据
-#raw 为RPC传输的数据包,一般情况不使用
+#props 为AMQP Properties
 #需要返回 一个key为string的字典
 ```
 发送RPC请求:
